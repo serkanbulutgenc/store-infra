@@ -1,0 +1,120 @@
+# Production topology. Only Caddy publishes ports; Postgres and Redis sit on an
+# internal network with no route to the host or the internet.
+#
+# Production:  docker compose -f compose.yaml up -d      (COMPOSE_FILE in .env also works)
+# Local:       docker compose up                          (compose.override.yaml swaps in placeholder apps)
+# Local build: docker compose -f compose.yaml -f compose.dev.yaml up --build
+
+name: store
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-api-base: &api-base
+  image: ${API_IMAGE:-ghcr.io/OWNER/store-backend:latest}
+  restart: unless-stopped
+  logging: *logging
+  env_file:
+    - path: env/django.env
+      required: false
+    - path: env/postgres.env
+      required: false
+  networks: [app, data]
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+networks:
+  edge: {}                  # caddy <-> web
+  app: {}                   # web <-> api (and outbound access for SMTP etc.)
+  data:
+    internal: true          # postgres and redis: no host access, no internet
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  postgres_data: {}
+  media: {}                 # written by api, served read-only by caddy
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/maintenance:/srv/maintenance:ro
+      - media:/srv/media:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on: [web]
+
+  web:
+    image: ${WEB_IMAGE:-ghcr.io/OWNER/store-frontend:latest}
+    restart: unless-stopped
+    logging: *logging
+    env_file:
+      - path: env/web.env
+        required: false
+    networks: [edge, app]
+
+  api:
+    <<: *api-base
+    command: /start
+    volumes:
+      - media:/app/store_backend/media
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://api:5000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    <<: *api-base
+    command: /start-celeryworker
+    volumes:
+      - media:/app/store_backend/media
+
+  beat:
+    <<: *api-base
+    command: /start-celerybeat
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    logging: *logging
+    env_file:
+      - path: env/postgres.env
+        required: false
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.2
+    restart: unless-stopped
+    logging: *logging
+    # Broker only: nothing here needs to survive a restart.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10

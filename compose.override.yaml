@@ -1,0 +1,37 @@
+# Loaded automatically by a bare `docker compose up`. Swaps the app images for
+# a tiny placeholder so the topology, Caddy and the networks can be exercised
+# before the real images exist. Production never loads this file:
+#   docker compose -f compose.yaml up -d
+x-placeholder: &placeholder
+  image: traefik/whoami:v1.10
+  healthcheck:
+    disable: true          # the image has no shell
+
+services:
+  caddy:
+    ports: !override
+      - "${HTTP_PORT:-8080}:80"
+    environment:
+      SITE_ADDRESS: ":80"  # plain HTTP locally, no certificate
+
+  web:
+    <<: *placeholder
+    command: ["--port", "3000", "--name", "placeholder-web"]
+
+  api:
+    <<: *placeholder
+    command: ["--port", "5000", "--name", "placeholder-api"]
+
+  worker:
+    <<: *placeholder
+    command: ["--port", "5001", "--name", "placeholder-worker"]
+
+  beat:
+    <<: *placeholder
+    command: ["--port", "5002", "--name", "placeholder-beat"]
+
+  postgres:
+    environment:
+      POSTGRES_DB: store
+      POSTGRES_USER: store
+      POSTGRES_PASSWORD: placeholder-not-a-secret

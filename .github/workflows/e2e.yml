@@ -1,0 +1,99 @@
+name: e2e
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  # Sibling repos are checked out next to store-infra inside the workspace.
+  BACKEND_DIR: ../store-backend
+  FRONTEND_DIR: ../store-frontend
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: store-infra
+
+      # Private repos need a token with read access; set the CHECKOUT_TOKEN secret.
+      # Pin `ref` to test a specific app commit; default is each repo's default branch.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/store-backend
+          token: ${{ secrets.CHECKOUT_TOKEN || github.token }}
+          path: store-backend
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/store-frontend
+          token: ${{ secrets.CHECKOUT_TOKEN || github.token }}
+          path: store-frontend
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Generate throwaway env files
+        working-directory: store-infra
+        run: scripts/ci-env.sh
+
+      - name: Build both app images
+        working-directory: store-infra
+        run: docker compose -f compose.yaml -f compose.dev.yaml build
+
+      - name: Start the stack and wait for healthchecks
+        working-directory: store-infra
+        run: docker compose -f compose.yaml -f compose.dev.yaml up -d --wait --wait-timeout 240
+
+      - name: Assert every service is up
+        working-directory: store-infra
+        run: scripts/assert-stack-up.sh
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: store-infra/e2e/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: store-infra/e2e/pnpm-lock.yaml
+
+      - name: Install Playwright
+        working-directory: store-infra/e2e
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Typecheck and run tests
+        working-directory: store-infra/e2e
+        run: |
+          pnpm typecheck
+          pnpm test
+
+      - name: Assert every service is still up
+        working-directory: store-infra
+        run: scripts/assert-stack-up.sh
+
+      - name: Dump service logs
+        if: failure()
+        working-directory: store-infra
+        run: docker compose -f compose.yaml -f compose.dev.yaml logs --no-color --tail 200
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            store-infra/e2e/playwright-report
+            store-infra/e2e/test-results
+          if-no-files-found: ignore
+
+      - name: Tear down
+        if: always()
+        working-directory: store-infra
+        run: docker compose -f compose.yaml -f compose.dev.yaml down -v

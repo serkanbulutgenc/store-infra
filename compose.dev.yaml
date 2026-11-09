@@ -1,0 +1,27 @@
+# Same stack, real images built from sibling checkouts:
+#   ../store-backend  and  ../../Web/store-frontend (override with BACKEND_DIR / FRONTEND_DIR in .env)
+#   docker compose -f compose.yaml -f compose.dev.yaml up --build
+# Needs env/django.env, env/postgres.env and env/web.env (run scripts/init-env.sh).
+services:
+  caddy:
+    ports: !override
+      - "${HTTP_PORT:-8080}:80"
+    environment:
+      SITE_ADDRESS: ":80"
+
+  web:
+    image: store-web:dev
+    build:
+      context: ${FRONTEND_DIR:-../../Web/store-frontend}
+
+  api: &api-dev
+    image: store-api:dev
+    build:
+      context: ${BACKEND_DIR:-../store-backend}
+      dockerfile: compose/production/django/Dockerfile
+
+  worker:
+    image: store-api:dev
+
+  beat:
+    image: store-api:dev
