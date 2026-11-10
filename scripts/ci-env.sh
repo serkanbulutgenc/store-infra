@@ -26,6 +26,7 @@ DJANGO_SETTINGS_MODULE=config.settings.production
 DJANGO_SECRET_KEY=$(rand)
 DJANGO_ADMIN_URL=admin/
 DJANGO_ALLOWED_HOSTS=localhost,api
+DJANGO_FRONTEND_ORIGIN=http://localhost:8080
 DJANGO_SECURE_SSL_REDIRECT=False
 WEB_CONCURRENCY=2
 REDIS_URL=redis://redis:6379/0
@@ -34,5 +35,6 @@ ENV
 cat > env/web.env <<ENV
 API_INTERNAL_URL=http://api:5000
 SESSION_COOKIE_NAME=store_session
+CSRF_COOKIE_NAME=__Secure-csrftoken
 ENV
 echo "wrote .env and env/*.env"

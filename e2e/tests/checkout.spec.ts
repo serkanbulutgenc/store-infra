@@ -36,7 +36,7 @@ test("a guest browses, fills a basket and places a COD order", async ({ page }) 
   // Checkout as a guest, cash on delivery.
   await expect(page.getByRole("heading", { name: "Ödeme", exact: true })).toBeVisible();
   await page.getByLabel("Ad soyad").fill("E2E Alıcı");
-  await page.getByLabel("E-posta").fill("e2e.shopper@example.com");
+  await page.getByLabel("E-posta", { exact: true }).fill("e2e.shopper@example.com");
   await page.getByLabel("Telefon").fill("0532 123 45 67");
   await page.getByLabel("İl", { exact: true }).fill("İstanbul");
   await page.getByLabel("İlçe", { exact: true }).fill("Kadıköy");
@@ -59,7 +59,7 @@ test("the order appears in the Dashboard", async ({ page }) => {
   expect(orderNumber, "the first test places the order").not.toBe("");
 
   await page.goto("/admin/login");
-  await page.getByLabel("E-posta").fill(seed.staffEmail);
+  await page.getByLabel("E-posta", { exact: true }).fill(seed.staffEmail);
   await page.getByLabel("Parola").fill(seed.staffPassword);
   await page.getByRole("button", { name: "Giriş yap" }).click();
   await expect(page).toHaveURL(/\/admin\/?$/);
