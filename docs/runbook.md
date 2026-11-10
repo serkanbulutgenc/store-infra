@@ -126,29 +126,26 @@ scripts/notify.sh "Test" "If you can read this on your phone, alerts work"
 
 ## Behind an existing Caddy
 
-Use this when the host already runs a reverse proxy on 80/443 (a home server, say) and the shop shares it. Skip `scripts/server-baseline.sh` there; it rewrites SSH and firewall settings meant for a dedicated VPS.
+Use this when the host already runs a reverse proxy container on 80/443 (a home server, say) and the shop shares it. Skip `scripts/server-baseline.sh` there; it rewrites SSH and firewall settings meant for a dedicated VPS.
 
-In `.env` on the server (see `.env.example`):
+The store's Caddy joins the proxy's Docker network instead of publishing ports, so the proxy reaches it by name and nothing new listens on the host. In `.env` on the server:
 
 ```
 SITE_ADDRESS=:80
-CADDY_BIND=127.0.0.1
-CADDY_HTTP_PORT=8080
-CADDY_HTTPS_PORT=8443
+PROXY_NETWORK=caddy-net                     # the proxy container's network (docker network ls)
+COMPOSE_FILE=compose.yaml:compose.proxy.yaml   # so plain `docker compose` matches the scripts
 ```
 
-The store's Caddy then serves plain HTTP on `127.0.0.1:8080` only, so it is not reachable from the network; the front Caddy owns the certificate. Add a block to the front Caddy's Caddyfile and reload it:
+`scripts/deploy.sh`, `backup.sh` and `alerts-check.sh` add `compose.proxy.yaml` by themselves when `PROXY_NETWORK` is set. This stack's Caddy serves plain HTTP; the proxy owns the certificate. Add a block to the proxy's Caddyfile and reload it (`docker exec <proxy> caddy reload --config /etc/caddy/Caddyfile`):
 
 ```
 shop.example.com {
 	encode zstd gzip
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy caddy:80
 }
 ```
 
-If the front Caddy runs in Docker, `127.0.0.1` is the container itself. Either run it with host networking, or add `extra_hosts: ["host.docker.internal:host-gateway"]` and use `reverse_proxy host.docker.internal:8080`, and set `CADDY_BIND=0.0.0.0` only if the container cannot reach the loopback (then block 8080 from outside with the firewall).
-
-Set `SITE_URL=https://shop.example.com` in `env/web.env` (canonicals and the sitemap use it), and make the Django allowed hosts and CSRF origins in `env/django.env` match the public hostname. The store's Caddyfile trusts `X-Forwarded-*` from private addresses, so the real client address and `https` scheme reach the app. `scripts/check-ports.sh` does not apply in this setup; check that `ss -tlnp` shows 8080 and 8443 bound to 127.0.0.1 only.
+If the proxy's network already has another container named `caddy`, the name is ambiguous: use the full container name, `<project>-caddy-1`. Set `SITE_URL=https://shop.example.com` in `env/web.env` (canonicals and the sitemap use it), and make the allowed hosts and CSRF origins in `env/django.env` match the public hostname. The store's Caddyfile trusts `X-Forwarded-*` from private addresses, so the real client address and `https` scheme reach the app. `scripts/check-ports.sh` does not apply here; `docker compose ps` should show no published ports.
 
 ## Server baseline
 

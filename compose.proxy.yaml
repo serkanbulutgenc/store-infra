@@ -1,0 +1,15 @@
+# Opt-in, for a host that already runs a reverse proxy container (see the runbook,
+# "Behind an existing Caddy"). Set PROXY_NETWORK in .env to that proxy's Docker network
+# (and SITE_ADDRESS=:80). Scripts add this file automatically when PROXY_NETWORK is set;
+# for plain `docker compose` also set COMPOSE_FILE=compose.yaml:compose.proxy.yaml in .env.
+# This stack's Caddy then publishes no host ports; the proxy reaches it as `caddy:80`
+# over the shared network.
+services:
+  caddy:
+    ports: !override []
+    networks: [edge, proxy]
+
+networks:
+  proxy:
+    name: ${PROXY_NETWORK:?set PROXY_NETWORK to the proxy container's Docker network}
+    external: true

@@ -22,7 +22,9 @@ cd "$(dirname "$0")/.."
 DOCKER=${DOCKER:-docker}
 WAIT_TIMEOUT=${WAIT_TIMEOUT:-180}
 STATE=.deploy
-compose() { "$DOCKER" compose -f compose.yaml "$@"; }
+COMPOSE_FILES=(-f compose.yaml)
+if [ -f .env ] && grep -q '^PROXY_NETWORK=.' .env; then COMPOSE_FILES+=(-f compose.proxy.yaml); fi
+compose() { "$DOCKER" compose "${COMPOSE_FILES[@]}" "$@"; }
 die() { echo "deploy: $*" >&2; exit 1; }
 
 [ -f .env ] || die ".env is missing (cp .env.example .env, then scripts/init-env.sh)"

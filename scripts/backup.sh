@@ -25,7 +25,9 @@ die() { echo "backup: $*" >&2; exit 1; }
 [ -n "${AGE_RECIPIENT:-}" ] || die "AGE_RECIPIENT is not set (env/backup.env)"
 mkdir -p "$STATE"
 
-compose() { "$DOCKER" compose -f compose.yaml "$@"; }
+COMPOSE_FILES=(-f compose.yaml)
+if [ -f .env ] && grep -q '^PROXY_NETWORK=.' .env; then COMPOSE_FILES+=(-f compose.proxy.yaml); fi
+compose() { "$DOCKER" compose "${COMPOSE_FILES[@]}" "$@"; }
 upload() { "$AGE" -r "$AGE_RECIPIENT" | "$RCLONE" rcat "$RCLONE_REMOTE/$1"; } # stdin -> encrypted object
 prune() { # prune PREFIX: delete remote objects outside the retention policy
   local old

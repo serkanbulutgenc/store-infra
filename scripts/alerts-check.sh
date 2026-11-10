@@ -28,7 +28,9 @@ if [ "$used" -gt "$LIMIT" ]; then
   rc=1; alert_once disk "Store: disk ${used}% full" "The root disk on $(hostname) is ${used}% full (limit ${LIMIT}%). Free space before backups or uploads fail."
 else clear_alert disk; fi
 
-failed=$("$DOCKER" compose -f compose.yaml exec -T api python manage.py outbox_failed_count 2>/dev/null | tr -dc 0-9)
+COMPOSE_FILES=(-f compose.yaml)
+if [ -f .env ] && grep -q '^PROXY_NETWORK=.' .env; then COMPOSE_FILES+=(-f compose.proxy.yaml); fi
+failed=$("$DOCKER" compose "${COMPOSE_FILES[@]}" exec -T api python manage.py outbox_failed_count 2>/dev/null | tr -dc 0-9)
 if [ -z "$failed" ]; then
   rc=1; alert_once outbox-probe "Store: cannot read the email outbox" "scripts/alerts-check.sh could not run outbox_failed_count in the api container."
 else
