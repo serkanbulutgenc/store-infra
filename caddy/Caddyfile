@@ -1,6 +1,15 @@
 # One public origin. SITE_ADDRESS is the domain in production (auto-TLS via
 # Let's Encrypt) or ":80" for plain HTTP locally. Django is never exposed:
 # the browser only talks to `web`, which proxies /api/** privately.
+{
+	# Behind another reverse proxy on the same host (see runbook, "Behind an existing
+	# Caddy"): believe its X-Forwarded-* headers. Harmless when facing the internet,
+	# since only private addresses are trusted.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
 {$SITE_ADDRESS} {
 	encode zstd gzip
 

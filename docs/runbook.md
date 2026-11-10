@@ -124,6 +124,32 @@ scripts/notify.sh "Test" "If you can read this on your phone, alerts work"
 
 **5. Acceptance, once, before launch.** Record in the launch checklist: the forced Sentry event arrived scrubbed; stopping `api` raised a downtime alert; `notify.sh` reached the phone; filling the disk is not tested, but `DISK_ALERT_PERCENT=1 scripts/alerts-check.sh` should push a disk alert.
 
+## Behind an existing Caddy
+
+Use this when the host already runs a reverse proxy on 80/443 (a home server, say) and the shop shares it. Skip `scripts/server-baseline.sh` there; it rewrites SSH and firewall settings meant for a dedicated VPS.
+
+In `.env` on the server (see `.env.example`):
+
+```
+SITE_ADDRESS=:80
+CADDY_BIND=127.0.0.1
+CADDY_HTTP_PORT=8080
+CADDY_HTTPS_PORT=8443
+```
+
+The store's Caddy then serves plain HTTP on `127.0.0.1:8080` only, so it is not reachable from the network; the front Caddy owns the certificate. Add a block to the front Caddy's Caddyfile and reload it:
+
+```
+shop.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+If the front Caddy runs in Docker, `127.0.0.1` is the container itself. Either run it with host networking, or add `extra_hosts: ["host.docker.internal:host-gateway"]` and use `reverse_proxy host.docker.internal:8080`, and set `CADDY_BIND=0.0.0.0` only if the container cannot reach the loopback (then block 8080 from outside with the firewall).
+
+Set `SITE_URL=https://shop.example.com` in `env/web.env` (canonicals and the sitemap use it), and make the Django allowed hosts and CSRF origins in `env/django.env` match the public hostname. The store's Caddyfile trusts `X-Forwarded-*` from private addresses, so the real client address and `https` scheme reach the app. `scripts/check-ports.sh` does not apply in this setup; check that `ss -tlnp` shows 8080 and 8443 bound to 127.0.0.1 only.
+
 ## Server baseline
 
 Provision a VPS (2 vCPU, 4 GB, 40 GB SSD, EU region) with Debian 12/13 or Ubuntu 24.04 and add your SSH public key at creation. Then:
