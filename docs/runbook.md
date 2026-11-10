@@ -1,6 +1,6 @@
 # Runbook
 
-Status: stub. Headings are fixed so later tickets (deploy, backups, observability, launch) have a place to fill in. Nothing here is verified against a live server yet.
+Status: deploy, rollback and server baseline are written (ticket 33) but not yet exercised on a live server. Other sections are stubs.
 
 ## Server layout
 
@@ -32,7 +32,28 @@ TODO: `_dmarc` record, starting at `p=none` with a reporting mailbox, tightening
 
 ## Deploy and rollback
 
-TODO (ticket 33): one-command script that pulls tags, migrates and restarts; rollback re-runs it with the previous tag. Deploy outside trading hours.
+**Publishing.** `store-backend` and `store-frontend` each have a `publish.yml` workflow: every merge to `main` pushes `ghcr.io/<owner>/store-<app>:sha-<commit>`, and pushing a `v*` git tag also pushes that tag. Production never runs `latest`. The frontend workflow is kept in `docs/templates/store-frontend-publish.yml` until it is copied to `store-frontend/.github/workflows/publish.yml`. If the packages are private, run `docker login ghcr.io` once on the server with a read-only token (`read:packages`).
+
+**Deploy** (on the server, as the deploy user, outside trading hours):
+
+```sh
+cd ~/store-infra && git pull
+scripts/deploy.sh v1.4.0              # api and web on the same tag
+scripts/deploy.sh sha-1a2b3c4 v1.3.2  # or on different tags
+```
+
+It pulls the images, starts Postgres and Redis, runs `manage.py migrate` with the new api image, restarts everything and waits for healthchecks. If the restart is not healthy it starts the previous release again and exits non-zero. Brief downtime during the restart is accepted. The live tags are in `.deploy/current` and `.env`.
+
+**Rollback:**
+
+```sh
+scripts/deploy.sh --rollback          # the tags that were live before; running it again flips back
+scripts/deploy.sh v1.3.2              # or deploy any earlier tag by name
+```
+
+A rollback restarts the old images and does not run migrations backwards. So every migration must work with the previous release for one deploy: add columns and tables nullable or defaulted before the code uses them, and drop or rename only in a later release once nothing reads them. A release that breaks this rule cannot be rolled back; restore from backup instead.
+
+`scripts/test-deploy.sh` checks the script's flow (deploy, second deploy, rollback, failed start, refused `latest`) against a fake docker and runs inside `scripts/check.sh`.
 
 ## Backups and restore drill
 
@@ -44,7 +65,15 @@ TODO (ticket 35).
 
 ## Server baseline
 
-TODO (ticket 33): SSH keys only, no root login, firewall on 80/443/SSH, unattended security updates, fail2ban.
+Provision a VPS (2 vCPU, 4 GB, 40 GB SSD, EU region) with Debian 12/13 or Ubuntu 24.04 and add your SSH public key at creation. Then:
+
+1. As root: `git clone` this repo, then `DEPLOY_USER=deploy scripts/server-baseline.sh`. Keep the root session open.
+2. In a new terminal, confirm `ssh deploy@<server>` works. Only then close the root session.
+3. As `deploy`: clone the repo, `cp .env.example .env`, set `SITE_ADDRESS`, `API_IMAGE`, `WEB_IMAGE` (owner part), run `scripts/init-env.sh`, fill the env files, `docker login ghcr.io` if needed, then `scripts/deploy.sh <tag>` for the first release.
+
+The script sets: SSH keys only (no passwords, no root login, 3 tries), ufw allowing 22, 80, 443 (and 443/udp for HTTP/3), unattended security updates, fail2ban on sshd (4 failures in 10 minutes, 1 hour ban), Docker Engine. It is safe to re-run. Docker-published ports bypass ufw, so the guard is that only `caddy` publishes ports (`scripts/check.sh` asserts it).
+
+**Verify from another machine:** `scripts/check-ports.sh <domain>` scans (all ports with `nmap` if installed) and fails on anything but 22, 80 and 443. Paste the output into the launch checklist.
 
 ## Troubleshooting
 

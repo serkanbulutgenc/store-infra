@@ -36,9 +36,13 @@ scripts/init-env.sh
 docker compose -f compose.yaml up -d
 ```
 
+## Deploy
+
+`scripts/deploy.sh <tag>` pulls, migrates and restarts; `scripts/deploy.sh --rollback` returns to the previous tags. `scripts/server-baseline.sh` hardens a new VPS and `scripts/check-ports.sh <host>` verifies only 22, 80 and 443 are open. See `docs/runbook.md`.
+
 ## Checks
 
-`scripts/check.sh` validates both Compose configurations, asserts only `caddy` publishes ports, and validates the Caddyfile (the last step needs a Docker daemon).
+`scripts/check.sh` runs the deploy-script test (fake docker), validates both Compose configurations, asserts only `caddy` publishes ports, and validates the Caddyfile (the last step needs a Docker daemon).
 
 ## End-to-end smoke tests
 

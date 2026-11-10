@@ -2,6 +2,8 @@
 # Static checks that need no running stack. Needs the docker CLI (and daemon for the Caddy step).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+echo "== deploy script (fake docker)"
+scripts/test-deploy.sh
 echo "== compose (placeholder + production)"
 docker compose config -q
 docker compose -f compose.yaml config -q
