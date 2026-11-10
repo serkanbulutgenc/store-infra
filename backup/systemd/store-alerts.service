@@ -1,0 +1,8 @@
+[Unit]
+Description=Store internal alerts (disk, failed emails, backup age)
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/store-infra
+ExecStart=/home/deploy/store-infra/scripts/alerts-check.sh

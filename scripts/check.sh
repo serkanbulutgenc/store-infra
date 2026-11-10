@@ -7,6 +7,8 @@ scripts/test-deploy.sh
 echo "== backup scripts (fake docker, age, rclone) and retention"
 scripts/test-backup.sh
 python3 backup/test_retention.py
+echo "== alerts (fake docker, notify)"
+scripts/test-alerts.sh
 echo "== compose (placeholder + production)"
 docker compose config -q
 docker compose -f compose.yaml config -q

@@ -74,12 +74,12 @@ scripts/init-env.sh                     # creates env/backup.env; set RCLONE_REM
 rclone config                           # create the off-site remote (S3/B2/etc.); use a key that can write but ideally not delete outside the bucket
 scripts/backup.sh                       # first run by hand; check the bucket has db-* and media-*-full objects
 sudo cp backup/systemd/*.service backup/systemd/*.timer /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now store-backup.timer store-backup-check.timer
+sudo systemctl daemon-reload && sudo systemctl enable --now store-backup.timer store-alerts.timer
 ```
 
 The units assume the checkout is `/home/deploy/store-infra` and the user is `deploy`; edit them if not.
 
-**Age alert.** `store-backup-check.timer` runs `scripts/backup-check.sh` hourly. It fails (visible in `systemctl --failed`, and POSTed to `ALERT_WEBHOOK_URL` if set) when the database or media backup has no success in 26 hours. A dead server or stopped timer cannot report itself, so also set `PING_URL` to a dead-man's-switch check (e.g. healthchecks.io, period 24h, grace 2h): `backup.sh` pings it after each fully successful run and the service mails you when the pings stop. Ticket 35 routes these alerts to the Owner's phone.
+**Age alert.** `store-alerts.timer` runs `scripts/alerts-check.sh` every 15 minutes, which includes `scripts/backup-check.sh`: the database or media backup having no success in 26 hours pushes an alert (see Monitoring and alerts). A dead server or stopped timer cannot report itself, so also set `PING_URL` to a dead-man's-switch check (e.g. healthchecks.io, period 24h, grace 2h): `backup.sh` pings it after each fully successful run and the service alerts you when the pings stop.
 
 **Restore drill** (monthly, and before launch). On the server, copy the private key over for the drill:
 
@@ -99,7 +99,30 @@ It downloads and decrypts the latest database and media chain, builds a scratch 
 
 ## Monitoring and alerts
 
-TODO (ticket 35).
+Five parts. The first three need accounts only the Owner can create; the code for all of them is in place and does nothing until the values below are set.
+
+**1. Error tracking (Sentry).** Create a Sentry project (platform Django) and put its DSN in `env/django.env` as `SENTRY_DSN=`; optionally `SENTRY_ENVIRONMENT=production`, `SENTRY_RELEASE=<tag>`. Restart (`scripts/deploy.sh` or `docker compose up -d`). The backend (`store_backend/observability.py`) never sends request bodies, cookies, headers or users, drops local variables, and replaces emails and phone numbers left in messages and exception text. Also enable "Prevent storing of IP addresses" and keep Session Replay off in the Sentry project settings (server-side backstop). **Check:** `docker compose exec api python manage.py sentry_test` sends a forced exception whose text contains a fake email and phone; open the event and confirm neither appears. The Start (frontend) server is not wired yet: add `@sentry/node` there with the same rules (no request bodies, cookies, headers or user; scrub emails and phones in `beforeSend`) as a follow-up in `store-frontend`.
+
+**2. Logs.** Backend logs are one JSON object per line on stdout; every service uses Docker `json-file` rotation (10 MB x 5). Read with `docker compose logs --since 1h api | jq -R 'fromjson? // .'`.
+
+**3. Uptime and downtime alerts.** In an external service (UptimeRobot or Better Stack, free tier), create two checks at 1-minute to 5-minute intervals:
+
+- `https://<domain>/` expecting 200 (storefront; fails if Caddy or `web` is down),
+- `https://<domain>/api/health` expecting 200 (fails with 503 if Postgres or Redis is down; also fails if `api` is stopped).
+
+Set the alert contacts to the Owner's email and the service's mobile push app. **Check:** `docker compose stop api`, wait for the alert (a few minutes), then `docker compose start api`.
+
+**4. Internal alerts (ntfy).** Install the ntfy app on the Owner's phone, choose a long random topic, and set `NTFY_URL=https://ntfy.sh/<topic>` (and `ALERT_EMAIL` to also get email) in `env/alerts.env` (created by `scripts/init-env.sh`). Enable the timer:
+
+```sh
+sudo cp backup/systemd/store-alerts.* /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now store-alerts.timer
+scripts/notify.sh "Test" "If you can read this on your phone, alerts work"
+```
+
+`scripts/alerts-check.sh` then pushes when: the root disk is over 80% (`DISK_ALERT_PERCENT`), more emails have failed after all retries than at the last check (`manage.py outbox_failed_count`), or the last backup is older than 26 hours. Disk and backup alerts repeat every 6 hours until fixed. Failed units show in `systemctl --failed` and `journalctl -u store-alerts`.
+
+**5. Acceptance, once, before launch.** Record in the launch checklist: the forced Sentry event arrived scrubbed; stopping `api` raised a downtime alert; `notify.sh` reached the phone; filling the disk is not tested, but `DISK_ALERT_PERCENT=1 scripts/alerts-check.sh` should push a disk alert.
 
 ## Server baseline
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exit 1 (and POST ALERT_WEBHOOK_URL if set) when the database or media backup has not
+# Exit 1 (and push through scripts/notify.sh) when the database or media backup has not
 # succeeded in the last 26 hours. Run hourly by the store-backup-check systemd timer; a
 # failed unit is visible in `systemctl --failed`. Test hooks: NOW (epoch), BACKUP_STATE_DIR.
 set -uo pipefail
@@ -16,8 +16,6 @@ for part in db media; do
   fi
 done
 [ ${#problems[@]} -eq 0 ] && { echo "backup-check: ok"; exit 0; }
-msg="store backup alert on $(hostname): ${problems[*]}"
-echo "$msg" >&2
-[ -z "${ALERT_WEBHOOK_URL:-}" ] || curl -fsS -m 10 -H 'Content-Type: application/json' \
-  -d "{\"text\": \"$msg\"}" "$ALERT_WEBHOOK_URL" >/dev/null || true
+msg="${problems[*]}"
+${NOTIFY:-scripts/notify.sh} "Store: backup overdue" "$msg"
 exit 1

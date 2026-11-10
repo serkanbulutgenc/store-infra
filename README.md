@@ -44,6 +44,10 @@ docker compose -f compose.yaml up -d
 
 `scripts/backup.sh` writes encrypted nightly backups of Postgres and the media volume to an off-site rclone remote; `scripts/backup-check.sh` alerts when none succeeded in 26 hours; `scripts/restore.sh` rebuilds a scratch stack from them for the monthly drill. Setup, key handling and the drill log are in `docs/runbook.md`.
 
+## Monitoring
+
+Backend errors go to Sentry (scrubbed), logs are JSON with rotation, `scripts/alerts-check.sh` (timer, every 15 minutes) pushes disk, failed-email and backup-age alerts through ntfy, and an external service watches the storefront and `/api/health`. Setup and acceptance checks: `docs/runbook.md`.
+
 ## Checks
 
 `scripts/check.sh` runs the deploy-script and backup/restore tests (fake docker), validates both Compose configurations, asserts only `caddy` publishes ports, and validates the Caddyfile (the last step needs a Docker daemon).

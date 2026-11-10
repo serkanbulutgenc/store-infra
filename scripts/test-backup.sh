@@ -5,7 +5,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/scripts" "$work/backup" "$work/remote" "$work/env"
-cp "$here"/scripts/{backup,backup-check,restore}.sh "$work/scripts/"
+cp "$here"/scripts/{backup,backup-check,restore,notify}.sh "$work/scripts/"
 cp "$here/backup/retention.py" "$here/backup/compose.restore.yaml" "$work/backup/"
 touch "$work/compose.yaml"
 printf 'RCLONE_REMOTE=%s\nAGE_RECIPIENT=age1testkey\n' "$work/remote" >"$work/env/backup.env"
