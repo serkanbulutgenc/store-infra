@@ -79,6 +79,14 @@ sudo systemctl daemon-reload && sudo systemctl enable --now store-backup.timer s
 
 The units assume the checkout is `/home/deploy/store-infra` and the user is `deploy`; edit them if not. Without root (a home server), use `backup/crontab.example` with `crontab -e` instead of the units, and install `age` and `rclone` into `~/bin` (checksum-verified downloads); the cron entries put `~/bin` on `PATH`. Cron times are in the server's local timezone, so check `date` before relying on 03:15.
 
+**Google Drive as the off-site remote** (what the home server uses). Three traps:
+
+- Create your **own OAuth client ID** (Google Cloud, Drive API, Desktop app). rclone's built-in shared client is being retired in 2026 and is rate-limited.
+- **Publish** the OAuth consent screen ("In production"). In "Testing" mode Google expires refresh tokens after 7 days and the nightly backup silently stops. With only the `drive.file` scope no Google verification is needed.
+- Use scope `drive.file`: rclone can then see only files it created itself, not the rest of the Drive. The catch is that a different client ID cannot see files made by another one.
+
+Headless sign-in without installing rclone on a laptop: `ssh -L 53682:127.0.0.1:53682 server 'rclone config create offsite2 drive scope=drive.file client_id=... client_secret=... --all=false > ~/.rclone-auth.log 2>&1'`, then open the `http://127.0.0.1:53682/auth?...` link from that log in the laptop's browser. Keep the log private and delete it afterwards: it can contain the token. `RCLONE_REMOTE` in `env/backup.env` names the remote.
+
 **Age alert.** `store-alerts.timer` runs `scripts/alerts-check.sh` every 15 minutes, which includes `scripts/backup-check.sh`: the database or media backup having no success in 26 hours pushes an alert (see Monitoring and alerts). A dead server or stopped timer cannot report itself, so also set `PING_URL` to a dead-man's-switch check (e.g. healthchecks.io, period 24h, grace 2h): `backup.sh` pings it after each fully successful run and the service alerts you when the pings stop.
 
 **Restore drill** (monthly, and before launch). On the server, copy the private key over for the drill:
