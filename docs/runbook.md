@@ -42,7 +42,7 @@ scripts/deploy.sh v1.4.0              # api and web on the same tag
 scripts/deploy.sh sha-1a2b3c4 v1.3.2  # or on different tags
 ```
 
-It pulls the images, starts Postgres and Redis, runs `manage.py migrate` with the new api image, restarts everything and waits for healthchecks. If the restart is not healthy it starts the previous release again and exits non-zero. Brief downtime during the restart is accepted. The live tags are in `.deploy/current` and `.env`.
+It pulls the images, starts Postgres and Redis, runs `manage.py migrate` with the new api image, makes sure the `media` volume is owned by the app user (a root-owned volume makes photo uploads fail with a 500), restarts everything and waits for healthchecks. If the restart is not healthy it starts the previous release again and exits non-zero. Brief downtime during the restart is accepted. The live tags are in `.deploy/current` and `.env`.
 
 **Rollback:**
 

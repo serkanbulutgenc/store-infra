@@ -29,6 +29,10 @@ migrate_line=$(grep -n "migrate" log | head -1 | cut -d: -f1)
 restart_line=$(grep -n "remove-orphans" log | head -1 | cut -d: -f1)
 [ "$migrate_line" -lt "$restart_line" ] || fail "migrate must run before the restart"
 
+chown_line=$(grep -n "run --rm --no-deps -u root api chown -R django:django /app/store_backend/media" log | head -1 | cut -d: -f1)
+[ -n "$chown_line" ] || fail "no media ownership fix"
+[ "$migrate_line" -lt "$chown_line" ] && [ "$chown_line" -lt "$restart_line" ] || fail "chown must run after migrate and before the restart"
+
 scripts/deploy.sh v2 >/dev/null
 expect_live ghcr.io/OWNER/store-backend:v2
 [ "$(cat .deploy/previous)" = "v1 v1" ] || fail "previous should be v1"
@@ -37,6 +41,7 @@ scripts/deploy.sh --rollback >/dev/null
 expect_live ghcr.io/OWNER/store-backend:v1
 [ "$(cat .deploy/current)" = "v1 v1" ] || fail "current should be v1 after rollback"
 grep -c "migrate" log | grep -qx 2 || fail "rollback must not migrate"
+grep -c "chown" log | grep -qx 2 || fail "rollback must not touch media ownership"
 scripts/deploy.sh --rollback >/dev/null
 expect_live ghcr.io/OWNER/store-backend:v2
 

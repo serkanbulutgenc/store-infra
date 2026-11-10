@@ -6,8 +6,9 @@
 #   scripts/deploy.sh --rollback          back to the tags that were live before
 #
 # Steps: pull the images, start Postgres and Redis, run migrations with the NEW api
-# image, restart everything on the new tags and wait for healthchecks. If the restart
-# does not come up healthy the previous tags are started again.
+# image, make sure the media volume belongs to the app user, restart everything on the
+# new tags and wait for healthchecks. If the restart does not come up healthy the
+# previous tags are started again.
 #
 # Migrations must stay backwards compatible with the previous release for one deploy
 # (add before you use, drop only in a later release), because a rollback restarts the
@@ -94,6 +95,12 @@ API_IMAGE="$API_REPO:$api_tag" WEB_IMAGE="$WEB_REPO:$web_tag" compose pull api w
 compose up -d --wait --wait-timeout "$WAIT_TIMEOUT" postgres redis
 echo "== migrating"
 API_IMAGE="$API_REPO:$api_tag" compose run --rm --no-deps api python manage.py migrate --noinput
+
+# The media volume is shared with Caddy (read-only). If Caddy's mount creates it first, or
+# a restore ran as root, it is root-owned and photo uploads fail with a 500 (PermissionError
+# on media/products). Idempotent, so it runs on every deploy.
+echo "== media volume ownership"
+API_IMAGE="$API_REPO:$api_tag" compose run --rm --no-deps -u root api chown -R django:django /app/store_backend/media
 
 echo "== restarting"
 if ! start "$api_tag" "$web_tag"; then
