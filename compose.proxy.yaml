@@ -2,12 +2,15 @@
 # "Behind an existing Caddy"). Set PROXY_NETWORK in .env to that proxy's Docker network
 # (and SITE_ADDRESS=:80). Scripts add this file automatically when PROXY_NETWORK is set;
 # for plain `docker compose` also set COMPOSE_FILE=compose.yaml:compose.proxy.yaml in .env.
-# This stack's Caddy then publishes no host ports; the proxy reaches it as `caddy:80`
+# This stack's Caddy then publishes no host ports; the proxy reaches it as `store-caddy:80`
 # over the shared network.
 services:
   caddy:
     ports: !override []
-    networks: [edge, proxy]
+    networks:
+      edge: {}
+      proxy:
+        aliases: [store-caddy]   # unique on the shared network; a proxy's own service is often called `caddy`
 
 networks:
   proxy:

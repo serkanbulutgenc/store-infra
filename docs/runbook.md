@@ -141,11 +141,11 @@ COMPOSE_FILE=compose.yaml:compose.proxy.yaml   # so plain `docker compose` match
 ```
 shop.example.com {
 	encode zstd gzip
-	reverse_proxy caddy:80
+	reverse_proxy store-caddy:80
 }
 ```
 
-If the proxy's network already has another container named `caddy`, the name is ambiguous: use the full container name, `<project>-caddy-1`. Set `SITE_URL=https://shop.example.com` in `env/web.env` (canonicals and the sitemap use it), and make the allowed hosts and CSRF origins in `env/django.env` match the public hostname. The store's Caddyfile trusts `X-Forwarded-*` from private addresses, so the real client address and `https` scheme reach the app. `scripts/check-ports.sh` does not apply here; `docker compose ps` should show no published ports.
+The store's Caddy is reachable on that network as `store-caddy` (an alias, because a proxy's own service is usually called `caddy` too). Set `SITE_URL=https://shop.example.com` in `env/web.env` (canonicals and the sitemap use it), and make the allowed hosts and CSRF origins in `env/django.env` match the public hostname. The store's Caddyfile trusts `X-Forwarded-*` from private addresses, so the real client address and `https` scheme reach the app. `scripts/check-ports.sh` does not apply here; `docker compose ps` should show no published ports.
 
 ## Server baseline
 
