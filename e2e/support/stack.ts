@@ -37,3 +37,13 @@ export function getFromApiContainer(url: string): { status: number; body: string
   ].join("\n");
   return JSON.parse(execInService("api", ["python", "-c", script]).trim());
 }
+
+/** Run a Python script (sent on stdin) in the api container's Django shell; returns stdout. */
+export function runDjangoScript(script: string): string {
+  const files = COMPOSE_FILES.flatMap((f) => ["-f", f]);
+  return execFileSync(
+    "docker",
+    ["compose", ...files, "exec", "-T", "api", "python", "manage.py", "shell"],
+    { cwd: STACK_DIR, encoding: "utf8", timeout: 60_000, input: script },
+  );
+}
