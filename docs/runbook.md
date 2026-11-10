@@ -77,7 +77,7 @@ sudo cp backup/systemd/*.service backup/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now store-backup.timer store-alerts.timer
 ```
 
-The units assume the checkout is `/home/deploy/store-infra` and the user is `deploy`; edit them if not.
+The units assume the checkout is `/home/deploy/store-infra` and the user is `deploy`; edit them if not. Without root (a home server), use `backup/crontab.example` with `crontab -e` instead of the units, and install `age` and `rclone` into `~/bin` (checksum-verified downloads); the cron entries put `~/bin` on `PATH`. Cron times are in the server's local timezone, so check `date` before relying on 03:15.
 
 **Age alert.** `store-alerts.timer` runs `scripts/alerts-check.sh` every 15 minutes, which includes `scripts/backup-check.sh`: the database or media backup having no success in 26 hours pushes an alert (see Monitoring and alerts). A dead server or stopped timer cannot report itself, so also set `PING_URL` to a dead-man's-switch check (e.g. healthchecks.io, period 24h, grace 2h): `backup.sh` pings it after each fully successful run and the service alerts you when the pings stop.
 
