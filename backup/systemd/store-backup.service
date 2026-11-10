@@ -1,0 +1,10 @@
+[Unit]
+Description=Store nightly backup (database + media, encrypted, off-site)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/store-infra
+ExecStart=/home/deploy/store-infra/scripts/backup.sh all

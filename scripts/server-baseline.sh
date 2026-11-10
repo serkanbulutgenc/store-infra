@@ -18,7 +18,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "== packages"
 apt-get update -qq
-apt-get install -y -qq ufw fail2ban unattended-upgrades ca-certificates curl gnupg
+apt-get install -y -qq ufw fail2ban unattended-upgrades ca-certificates curl gnupg age rclone
 
 echo "== deploy user $DEPLOY_USER"
 id "$DEPLOY_USER" >/dev/null 2>&1 || adduser --disabled-password --gecos "" "$DEPLOY_USER"

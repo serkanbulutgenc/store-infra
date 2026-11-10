@@ -40,9 +40,13 @@ docker compose -f compose.yaml up -d
 
 `scripts/deploy.sh <tag>` pulls, migrates and restarts; `scripts/deploy.sh --rollback` returns to the previous tags. `scripts/server-baseline.sh` hardens a new VPS and `scripts/check-ports.sh <host>` verifies only 22, 80 and 443 are open. See `docs/runbook.md`.
 
+## Backups
+
+`scripts/backup.sh` writes encrypted nightly backups of Postgres and the media volume to an off-site rclone remote; `scripts/backup-check.sh` alerts when none succeeded in 26 hours; `scripts/restore.sh` rebuilds a scratch stack from them for the monthly drill. Setup, key handling and the drill log are in `docs/runbook.md`.
+
 ## Checks
 
-`scripts/check.sh` runs the deploy-script test (fake docker), validates both Compose configurations, asserts only `caddy` publishes ports, and validates the Caddyfile (the last step needs a Docker daemon).
+`scripts/check.sh` runs the deploy-script and backup/restore tests (fake docker), validates both Compose configurations, asserts only `caddy` publishes ports, and validates the Caddyfile (the last step needs a Docker daemon).
 
 ## End-to-end smoke tests
 

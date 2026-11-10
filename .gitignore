@@ -6,3 +6,5 @@ env/*.env
 node_modules
 e2e/playwright-report
 e2e/test-results
+.backup
+__pycache__

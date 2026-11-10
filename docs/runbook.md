@@ -1,6 +1,6 @@
 # Runbook
 
-Status: deploy, rollback and server baseline are written (ticket 33) but not yet exercised on a live server. Other sections are stubs.
+Status: deploy, rollback, server baseline (ticket 33) and backups (ticket 34) are written but not yet exercised on a live server. Other sections are stubs.
 
 ## Server layout
 
@@ -57,7 +57,45 @@ A rollback restarts the old images and does not run migrations backwards. So eve
 
 ## Backups and restore drill
 
-TODO (ticket 34).
+**What and where.** Every night (03:15 UTC) `scripts/backup.sh` writes to an off-site bucket through rclone:
+
+- `db-YYYY-MM-DD.sql.gz.age`: `pg_dump` of the store database, gzipped.
+- `media-DATE-full.tar.age` on Sundays (and on the first run), `media-DATE-incr.tar.age` on other nights (only files changed since the last success). A restore needs the latest full plus the incrementals after it.
+- Retention (`backup/retention.py`, run after each backup): newest 14 daily, 8 weekly, 6 monthly. Incrementals are kept 14 days with their full.
+- **Weekly provider snapshot:** enable the VPS provider's automatic weekly snapshot in its console (a whole-machine fallback; the provider keeps it, not these scripts). Note the setting in the launch checklist.
+
+**Encryption and keys.** Objects are encrypted on the server with [age](https://age-encryption.org) to a public key, so the server holds nothing that can decrypt them. The private key lives off the VPS: password manager plus one printed copy kept with the Owner's papers. Losing it makes every backup unreadable; the drill proves the copy works.
+
+**One-time setup** (on the server, as `deploy`):
+
+```sh
+age-keygen -o store-backup.key          # on YOUR machine, not the VPS; note the "Public key: age1..." line
+scripts/init-env.sh                     # creates env/backup.env; set RCLONE_REMOTE and AGE_RECIPIENT (the public key)
+rclone config                           # create the off-site remote (S3/B2/etc.); use a key that can write but ideally not delete outside the bucket
+scripts/backup.sh                       # first run by hand; check the bucket has db-* and media-*-full objects
+sudo cp backup/systemd/*.service backup/systemd/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now store-backup.timer store-backup-check.timer
+```
+
+The units assume the checkout is `/home/deploy/store-infra` and the user is `deploy`; edit them if not.
+
+**Age alert.** `store-backup-check.timer` runs `scripts/backup-check.sh` hourly. It fails (visible in `systemctl --failed`, and POSTed to `ALERT_WEBHOOK_URL` if set) when the database or media backup has no success in 26 hours. A dead server or stopped timer cannot report itself, so also set `PING_URL` to a dead-man's-switch check (e.g. healthchecks.io, period 24h, grace 2h): `backup.sh` pings it after each fully successful run and the service mails you when the pings stop. Ticket 35 routes these alerts to the Owner's phone.
+
+**Restore drill** (monthly, and before launch). On the server, copy the private key over for the drill:
+
+```sh
+scp store-backup.key deploy@server:/dev/shm/store-backup.key
+scripts/restore.sh /dev/shm/store-backup.key            # latest backup; --date YYYY-MM-DD for an older one; --keep to leave it running
+shred -u /dev/shm/store-backup.key
+```
+
+It downloads and decrypts the latest database and media chain, builds a scratch Compose project (`store-restore`, separate volumes, Caddy on `127.0.0.1:8081`, the live stack untouched), loads the data, starts every service and checks `/health`, the storefront through Caddy, applied migrations and media file count, then removes the scratch stack. `worker` and `beat` are deliberately not started, so the drill cannot send mail or call live APIs with the production credentials. Needs enough free disk for a second copy of the data. To restore for real after a disaster: provision a server (see Server baseline), run `scripts/deploy.sh <tag>` to get an empty stack, then load the dump into its `postgres` and untar the media chain into the `media` volume the way `scripts/restore.sh` does.
+
+**Drill log** (add a line per drill: date, backup used, who, result, time taken, problems):
+
+| Date | Backup | By | Result | Notes |
+| --- | --- | --- | --- | --- |
+| | | | not yet run on a live server | `scripts/test-backup.sh` covers the flow with fakes |
 
 ## Monitoring and alerts
 

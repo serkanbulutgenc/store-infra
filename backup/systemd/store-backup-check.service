@@ -1,0 +1,8 @@
+[Unit]
+Description=Alert when the last successful backup is older than 26 hours
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/store-infra
+ExecStart=/home/deploy/store-infra/scripts/backup-check.sh

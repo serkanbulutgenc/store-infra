@@ -1,0 +1,9 @@
+# Overlay for scripts/restore.sh: the same stack as production in a scratch project
+# (`docker compose -p store-restore`), so its volumes are separate and Caddy listens on
+# localhost only, over plain HTTP, on a port that cannot clash with the live stack.
+services:
+  caddy:
+    ports: !override
+      - "127.0.0.1:${RESTORE_PORT:-8081}:80"
+    environment:
+      SITE_ADDRESS: ":80"
