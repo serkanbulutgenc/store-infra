@@ -109,7 +109,7 @@ It downloads and decrypts the latest database and media chain, builds a scratch 
 
 Five parts. The first three need accounts only the Owner can create; the code for all of them is in place and does nothing until the values below are set.
 
-**1. Error tracking (Sentry).** Create a Sentry project (platform Django) and put its DSN in `env/django.env` as `SENTRY_DSN=`; optionally `SENTRY_ENVIRONMENT=production`, `SENTRY_RELEASE=<tag>`. Restart (`scripts/deploy.sh` or `docker compose up -d`). The backend (`store_backend/observability.py`) never sends request bodies, cookies, headers or users, drops local variables, and replaces emails and phone numbers left in messages and exception text. Also enable "Prevent storing of IP addresses" and keep Session Replay off in the Sentry project settings (server-side backstop). **Check:** `docker compose exec api python manage.py sentry_test` sends a forced exception whose text contains a fake email and phone; open the event and confirm neither appears. The Start (frontend) server is wired the same way: put `SENTRY_DSN=` (and optionally `SENTRY_ENVIRONMENT`) in `env/web.env` and restart `web`. It drops request bodies, cookies, headers and user, and scrubs emails and phone numbers in `beforeSend`. It reports unhandled server errors and route errors rendered by the error page, not 4xx API outcomes (validation, 401, 403, 404). **Check:** with the DSN set, stop `api` and load the storefront; the failed page load should appear as an event, with no email, cookie or phone in it.
+**1. Error tracking (Bugsink, self-hosted).** The apps use the Sentry SDK and send to a Sentry-compatible tracker that runs on the server itself, so no shopper data and no hostnames outside the server are involved (hosted Sentry's ingest hosts were blocked on the server's network). Setup, DSNs and checks are in "Error tracking (Bugsink)" below. The backend (`store_backend/observability.py`) never sends request bodies, cookies, headers or users, drops local variables, and replaces emails and phone numbers left in messages and exception text; the Start server does the same in `beforeSend`.
 
 **2. Logs.** Backend logs are one JSON object per line on stdout; every service uses Docker `json-file` rotation (10 MB x 5). Read with `docker compose logs --since 1h api | jq -R 'fromjson? // .'`.
 
@@ -130,7 +130,47 @@ scripts/notify.sh "Test" "If you can read this on your phone, alerts work"
 
 `scripts/alerts-check.sh` then pushes when: the root disk is over 80% (`DISK_ALERT_PERCENT`), more emails have failed after all retries than at the last check (`manage.py outbox_failed_count`), or the last backup is older than 26 hours. Disk and backup alerts repeat every 6 hours until fixed. Failed units show in `systemctl --failed` and `journalctl -u store-alerts`.
 
-**5. Acceptance, once, before launch.** Record in the launch checklist: the forced Sentry event arrived scrubbed; stopping `api` raised a downtime alert; `notify.sh` reached the phone; filling the disk is not tested, but `DISK_ALERT_PERCENT=1 scripts/alerts-check.sh` should push a disk alert.
+**5. Acceptance, once, before launch.** Record in the launch checklist: the forced error event arrived in Bugsink scrubbed; stopping `api` raised a downtime alert; `notify.sh` reached the phone; filling the disk is not tested, but `DISK_ALERT_PERCENT=1 scripts/alerts-check.sh` should push a disk alert.
+
+## Error tracking (Bugsink)
+
+Opt-in service `bugsink` (profile `errors`, image pinned in `compose.yaml`). It has no public port: the UI listens on `127.0.0.1:8000` of the host and is reached through an SSH tunnel. Registration and phone-home are off. It stores its data in a separate `bugsink` database in the store's Postgres. `scripts/backup.sh` dumps only the store's own database, so error history is not backed up, which is fine for disposable data.
+
+**Set up once** (on the server, in the checkout):
+
+```sh
+scripts/init-env.sh                                   # creates env/bugsink.env from the template
+sed -i "s|CHANGE-SECRET-KEY|$(openssl rand -hex 40)|" env/bugsink.env
+nano env/bugsink.env                                  # set CREATE_SUPERUSER=<your email>:<a strong password>
+
+# the database and role (the password is generated, written to env/bugsink.env, never printed)
+export BUGSINK_DB_PASSWORD=$(openssl rand -hex 24)
+docker compose exec -T -e BUGSINK_DB_PASSWORD postgres \
+  sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -v pw="$BUGSINK_DB_PASSWORD"' <<'SQL'
+CREATE ROLE bugsink LOGIN PASSWORD :'pw';
+CREATE DATABASE bugsink OWNER bugsink;
+SQL
+sed -i "s|CHANGE-DB-PASSWORD|$BUGSINK_DB_PASSWORD|" env/bugsink.env
+unset BUGSINK_DB_PASSWORD
+
+echo 'COMPOSE_PROFILES=errors' >> .env                # keep the service in every later `up` and deploy
+docker compose up -d
+docker compose logs --tail=30 bugsink                 # migrations ran; confirm phone-home is off
+```
+
+**Open the UI** from your laptop: `ssh -L 8000:localhost:8000 <deploy user>@<server>`, then http://localhost:8000 and log in with the `CREATE_SUPERUSER` credentials. Create two projects, `store-api` and `store-web`. The DSN shown for each uses the host `localhost:8000` (from `BASE_URL`); the apps reach Bugsink as `bugsink:8000` over the Docker network, so use that host instead:
+
+```
+SENTRY_DSN=http://<key>@bugsink:8000/<project id>
+```
+
+Put the `store-api` DSN in `env/django.env` and the `store-web` DSN in `env/web.env` (with `SENTRY_ENVIRONMENT=production`), then `docker compose up -d`.
+
+**Checks.** `docker compose exec api python manage.py sentry_test` sends a forced exception whose text contains a fake email and phone; open the event in the UI and confirm neither appears and there are no cookies, headers or user fields. For the Start server, stop `api` and load the storefront: the failed page load should appear as an event, again with nothing personal in it. Start `api` again afterwards.
+
+**Alerts.** Bugsink emails about new issues when `EMAIL_HOST` and the other `EMAIL_*` values in `env/bugsink.env` are set (the shop's SMTP relay works). If the server itself is down nothing reports, which is what the external uptime checks are for.
+
+**Upgrades.** Change the image tag in `compose.yaml`, read Bugsink's upgrade notes, then `docker compose up -d bugsink`.
 
 ## Behind an existing Caddy
 

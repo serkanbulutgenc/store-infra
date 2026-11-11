@@ -1,5 +1,6 @@
-# Production topology. Only Caddy publishes ports; Postgres and Redis sit on an
-# internal network with no route to the host or the internet.
+# Production topology. Only Caddy publishes ports (the optional error tracker binds to
+# 127.0.0.1 for an SSH tunnel); Postgres and Redis sit on an internal network with no
+# route to the host or the internet.
 #
 # Production:  docker compose -f compose.yaml up -d      (COMPOSE_FILE in .env also works)
 # Local:       docker compose up                          (compose.override.yaml swaps in placeholder apps)
@@ -118,3 +119,21 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+
+  # Self-hosted error tracker, Sentry-compatible, so the apps keep their Sentry SDK and only
+  # the DSN changes. Opt in with COMPOSE_PROFILES=errors in .env. No public port: the UI is
+  # on 127.0.0.1 only (ssh -L 8000:localhost:8000 <server>). Needs a `bugsink` database and
+  # role in Postgres, see docs/runbook.md ("Error tracking").
+  bugsink:
+    profiles: ["errors"]
+    image: bugsink/bugsink:2.6.2
+    restart: unless-stopped
+    logging: *logging
+    env_file:
+      - path: env/bugsink.env
+        required: false
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks: [app, data]
+    depends_on:
+      postgres: { condition: service_healthy }
