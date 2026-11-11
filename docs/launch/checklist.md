@@ -34,4 +34,4 @@ Go-live is blocked until every box is ticked and one restore drill is logged in 
 
 ## Blockers to clear first
 
-Tickets 32, 33, 35 and 36 must be closed (34 already is).
+Tickets 32 to 36 are closed (33 and 35 on 2026-11-11). What still gates go-live is the checklist above, including the logged restore drill.
