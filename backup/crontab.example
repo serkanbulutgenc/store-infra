@@ -1,6 +1,8 @@
-# For hosts where the systemd units in this folder cannot be installed (no root), e.g. a
-# home server. Install with `crontab -e`, adjusting the paths. cron has a minimal PATH, so
-# set it to include where age and rclone live (~/bin if installed without root).
+# Last resort, for hosts where the systemd units in this folder cannot be installed (no root).
+# On OpenMediaVault a user crontab can disappear (the spool may be in RAM), so prefer the
+# adapted systemd units: docs/runbook.md, "Home server (non-root user, OpenMediaVault)".
+# Install with `crontab -e`, adjusting the paths. cron has a minimal PATH, so set it to include
+# where age and rclone live (~/bin if installed without root).
 PATH=/home/sekonet/bin:/usr/local/bin:/usr/bin:/bin
 15 3 * * * cd /home/sekonet/services/store && scripts/backup.sh all >>.backup/backup.log 2>&1
 */15 * * * * cd /home/sekonet/services/store && scripts/alerts-check.sh >>.backup/alerts.log 2>&1

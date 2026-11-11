@@ -77,7 +77,7 @@ sudo cp backup/systemd/*.service backup/systemd/*.timer /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now store-backup.timer store-alerts.timer
 ```
 
-The units assume the checkout is `/home/deploy/store-infra` and the user is `deploy`; edit them if not. Without root (a home server), use `backup/crontab.example` with `crontab -e` instead of the units, and install `age` and `rclone` into `~/bin` (checksum-verified downloads); the cron entries put `~/bin` on `PATH`. Cron times are in the server's local timezone, so check `date` before relying on 03:15.
+The units assume the checkout is `/home/deploy/store-infra` and the user is `deploy`. On a home server (another user and path, `age` and `rclone` in `~/bin`), adapt them as described in "Home server (non-root user, OpenMediaVault)" below; prefer that over cron, because a user crontab can disappear on OpenMediaVault. Install `age` and `rclone` into `~/bin` with checksum-verified downloads when you have no root.
 
 **Google Drive as the off-site remote** (what the home server uses). Three traps:
 
@@ -173,6 +173,44 @@ Put the `store-api` DSN in `env/django.env` and the `store-web` DSN in `env/web.
 **Alerts.** Bugsink emails about new issues when `EMAIL_HOST` and the other `EMAIL_*` values in `env/bugsink.env` are set (the shop's SMTP relay works). If the server itself is down nothing reports, which is what the external uptime checks are for.
 
 **Upgrades.** Change the image tag in `compose.yaml`, read Bugsink's upgrade notes, then `docker compose up -d bugsink`.
+
+## Home server (non-root user, OpenMediaVault)
+
+For a server where the checkout is not `/home/deploy/store-infra` and the user is not `deploy` (here: user `sekonet`, checkout `~/services/store`, `age` and `rclone` in `~/bin`).
+
+**Schedule with systemd timers, not a user crontab.** OpenMediaVault can keep `/var/spool` and `/var/log` in RAM (the folder2ram plugin), so a crontab created with `crontab -e` can vanish: on this server a crontab installed on 2026-11-10 ran the 03:15 backup on 2026-11-11 and was gone hours later, with no backup or alert job scheduled anywhere. systemd units in `/etc/systemd/system` live on the real disk and survive reboots.
+
+Adapt the shipped units to your user and checkout, put `~/bin` on their `PATH`, and run the backup at local time (the shipped timer says UTC):
+
+```sh
+CHECKOUT=/home/sekonet/services/store; RUN_AS=sekonet
+cd "$CHECKOUT"
+sudo cp backup/systemd/store-alerts.* backup/systemd/store-backup.* /etc/systemd/system/
+sudo sed -i "s|/home/deploy/store-infra|$CHECKOUT|g; s|^User=deploy\$|User=$RUN_AS|" /etc/systemd/system/store-alerts.service /etc/systemd/system/store-backup.service
+sudo sed -i "/^\[Service\]/a Environment=PATH=/home/$RUN_AS/bin:/usr/local/bin:/usr/bin:/bin" /etc/systemd/system/store-alerts.service /etc/systemd/system/store-backup.service
+sudo sed -i 's/ UTC$//' /etc/systemd/system/store-backup.timer
+systemd-analyze verify /etc/systemd/system/store-alerts.{service,timer} /etc/systemd/system/store-backup.{service,timer}   # prints nothing when fine
+sudo systemctl daemon-reload
+sudo systemctl enable --now store-alerts.timer store-backup.timer
+systemctl list-timers 'store-*' --no-pager
+```
+
+The alerts timer runs once at once and then every 15 minutes; the backup runs at 03:15 local time plus up to 10 minutes of random delay. Run `date` to check the server's timezone.
+
+**Check that the schedules are alive** (do this after the first night and after any reboot):
+
+```sh
+systemctl list-timers 'store-*' --no-pager            # both timers listed with a next run
+journalctl -u store-alerts.service -n 15 --no-pager   # "stack check 1/3: healthy", no ALERT lines
+ls -la --time-style=long-iso .backup/last-success-*   # written last night
+ls -la --time-style=long-iso .alerts/outbox-failed    # rewritten every 15 minutes while api is healthy
+```
+
+`.alerts/outbox-failed` is the quickest tell: if its time is older than about 20 minutes while the stack is up, nothing is running the alert check. The heartbeat (`HEARTBEAT_URL`) also catches this: the dead-man's switch alerts when the pings stop.
+
+**Stop and start the alert schedule** (for the heartbeat test or maintenance): `sudo systemctl stop store-alerts.timer`, and `sudo systemctl start store-alerts.timer` afterwards. Forgetting the second command silences every internal alert.
+
+**If you have to use cron** (`backup/crontab.example`), check `crontab -l` after every reboot, and prefer one that is stored on disk.
 
 ## Behind an existing Caddy
 
