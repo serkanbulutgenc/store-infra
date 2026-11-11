@@ -113,12 +113,14 @@ Five parts. The first three need accounts only the Owner can create; the code fo
 
 **2. Logs.** Backend logs are one JSON object per line on stdout; every service uses Docker `json-file` rotation (10 MB x 5). Read with `docker compose logs --since 1h api | jq -R 'fromjson? // .'`.
 
-**3. Uptime and downtime alerts.** In an external service (UptimeRobot or Better Stack, free tier), create two checks at 1-minute to 5-minute intervals:
+**3. Uptime and downtime alerts.** Two layers, both using the channels from part 4:
 
-- `https://<domain>/` expecting 200 (storefront; fails if Caddy or `web` is down),
-- `https://<domain>/api/health` expecting 200 (fails with 503 if Postgres or Redis is down; also fails if `api` is stopped).
+- *Internal probe.* `scripts/alerts-check.sh` (every 15 minutes) checks `api` (`/health`, which also fails if Postgres or Redis is down), the storefront home page inside the `web` container, and that `caddy` is running. It retries 3 times, 30 seconds apart, so a deploy restart does not page; a lasting failure pushes "Store: DOWN" (high priority) through ntfy, repeats hourly, and one "Store: back up" message follows recovery.
+- *Heartbeat for a dead server.* A dead server, Docker or timer cannot report itself. Create a second healthchecks.io check (period 15 minutes, grace 20 minutes; separate from the backup one), connect its email and ntfy integrations, and put its ping URL in `env/alerts.env` as `HEARTBEAT_URL=`. `alerts-check.sh` pings it only while everything is healthy, so when the pings stop the service alerts you.
 
-Set the alert contacts to the Owner's email and the service's mobile push app. **Check:** `docker compose stop api`, wait for the alert (a few minutes), then `docker compose start api`.
+An external uptime service (UptimeRobot, Better Stack) is an optional extra: checks on `https://<domain>/` and `https://<domain>/api/health` expecting 200, at 1 to 5 minute intervals, with the Owner's email and the service's push app as contacts.
+
+**Check:** `docker compose stop api`, then run `scripts/alerts-check.sh` by hand (about a minute of retries) or wait for the next timer run: "Store: DOWN" arrives on the phone. `docker compose start api` and the next run sends "Store: back up". To test the heartbeat, stop the timer (`sudo systemctl stop store-alerts.timer`) and wait past the grace period; start it again afterwards.
 
 **4. Internal alerts (ntfy).** Install the ntfy app on the Owner's phone, choose a long random topic, and set `NTFY_URL=https://ntfy.sh/<topic>` (and `ALERT_EMAIL` to also get email) in `env/alerts.env` (created by `scripts/init-env.sh`). Enable the timer:
 
@@ -128,9 +130,9 @@ sudo systemctl daemon-reload && sudo systemctl enable --now store-alerts.timer
 scripts/notify.sh "Test" "If you can read this on your phone, alerts work"
 ```
 
-`scripts/alerts-check.sh` then pushes when: the root disk is over 80% (`DISK_ALERT_PERCENT`), more emails have failed after all retries than at the last check (`manage.py outbox_failed_count`), or the last backup is older than 26 hours. Disk and backup alerts repeat every 6 hours until fixed. Failed units show in `systemctl --failed` and `journalctl -u store-alerts`.
+`scripts/alerts-check.sh` then pushes when: the root disk is over 80% (`DISK_ALERT_PERCENT`), more emails have failed after all retries than at the last check (`manage.py outbox_failed_count`), or the last backup is older than 26 hours, or the stack is not healthy (part 3). Disk and backup alerts repeat every 6 hours until fixed. Failed units show in `systemctl --failed` and `journalctl -u store-alerts`.
 
-**5. Acceptance, once, before launch.** Record in the launch checklist: the forced error event arrived in Bugsink scrubbed; stopping `api` raised a downtime alert; `notify.sh` reached the phone; filling the disk is not tested, but `DISK_ALERT_PERCENT=1 scripts/alerts-check.sh` should push a disk alert.
+**5. Acceptance, once, before launch.** Record in the launch checklist: the forced error event arrived in Bugsink scrubbed; stopping `api` raised a "Store: DOWN" push and recovery a "back up" one; the heartbeat check went down when the timer was stopped; `notify.sh` reached the phone; filling the disk is not tested, but `DISK_ALERT_PERCENT=1 scripts/alerts-check.sh` should push a disk alert.
 
 ## Error tracking (Bugsink)
 

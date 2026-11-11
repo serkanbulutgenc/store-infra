@@ -9,6 +9,12 @@ touch "$work/compose.yaml"
 cat >"$work/fake-docker" <<'F'
 #!/usr/bin/env bash
 [ -n "${DOCKER_DOWN:-}" ] && exit 1
+failing() { case ",${PROBE_FAIL:-}," in *",$1,"*) return 0 ;; esac; return 1; }
+case "$*" in
+  *"exec -T api python -c"*) failing api && exit 1; exit 0 ;;
+  *"exec -T web wget"*) failing web && exit 1; exit 0 ;;
+  *"ps --status running --services"*) printf 'api\nweb\n'; failing caddy || echo caddy; exit 0 ;;
+esac
 echo "${FAILED_COUNT:-0}"
 F
 cat >"$work/notify" <<'F'
@@ -26,6 +32,7 @@ cd "$work"
 fail() { echo "FAIL: $*"; cat sent 2>/dev/null || true; exit 1; }
 now=2000000000
 echo $((now - 3600)) | tee "$BACKUP_STATE_DIR/last-success-db" >"$BACKUP_STATE_DIR/last-success-media"
+export PROBE_TRIES=1 PROBE_RETRY_SECONDS=0
 run() { NOW=$1 DISK_PERCENT=${2:-50} FAILED_COUNT=${3:-0} scripts/alerts-check.sh 2>/dev/null; }
 count() { grep -c "$1" sent 2>/dev/null || true; }
 
@@ -48,6 +55,28 @@ if DOCKER_DOWN=1 run $now; then fail "unreadable outbox must be flagged"; fi
 echo $((now - 27 * 3600)) >"$BACKUP_STATE_DIR/last-success-db"
 run $now 50 3 || true; [ "$(count 'backup overdue')" = 1 ] || fail "old backup must alert"
 run $((now + 900)) 50 3 || true; [ "$(count 'backup overdue')" = 1 ] || fail "backup alert repeated early"
+
+# stack health: a lasting failure alerts, repeats hourly, and recovery is announced once
+rm -f "$ALERT_STATE_DIR/sent-down"; : >sent; echo $((now - 3600)) | tee "$BACKUP_STATE_DIR/last-success-db" >"$BACKUP_STATE_DIR/last-success-media"
+if PROBE_FAIL=api run $now; then fail "api down must fail the run"; fi
+[ "$(count 'Store: DOWN | .*: api\.')" = 1 ] || fail "api down must alert once: $(cat sent)"
+PROBE_FAIL=api run $((now + 900)) || true; [ "$(count 'Store: DOWN')" = 1 ] || fail "down alert must not repeat within 1h"
+PROBE_FAIL=api run $((now + 3700)) || true; [ "$(count 'Store: DOWN')" = 2 ] || fail "down alert must repeat after 1h"
+PROBE_FAIL=web,caddy run $((now + 7400)) || true; grep -q 'storefront (web), caddy' sent || fail "web and caddy failures must be named: $(cat sent)"
+run $((now + 8300)) || fail "recovered system must pass"
+[ "$(count 'Store: back up')" = 1 ] || fail "recovery must be announced once"
+run $((now + 9200)) || fail "healthy again"; [ "$(count 'Store: back up')" = 1 ] || fail "recovery announced twice"
+PROBE_FAIL=api run $((now + 10100)) || true; [ "$(count 'Store: DOWN')" = 4 ] || fail "a new outage must alert again"
+rm -f "$ALERT_STATE_DIR/sent-down"
+
+# heartbeat: pinged only while healthy
+: >curl
+HEARTBEAT_URL=https://hc.example/ping CURL="$work/fake-curl" run $now || fail "healthy with heartbeat"
+grep -q 'https://hc.example/ping' curl || fail "heartbeat not pinged when healthy"
+: >curl
+PROBE_FAIL=api HEARTBEAT_URL=https://hc.example/ping CURL="$work/fake-curl" run $((now + 20000)) || true
+[ ! -s curl ] || fail "heartbeat must not be pinged while down"
+: >sent
 
 # notify.sh: pushes to ntfy with title/priority/email; silent success without a channel
 printf 'NTFY_URL=https://ntfy.example/topic\nALERT_EMAIL=owner@example.com\n' >env/alerts.env
