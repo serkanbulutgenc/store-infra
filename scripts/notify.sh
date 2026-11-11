@@ -21,19 +21,24 @@ else
 fi
 
 send_email() {
-  local from=${ALERT_SMTP_FROM:-$ALERT_SMTP_USER} cfg subject body
+  local from=${ALERT_SMTP_FROM:-$ALERT_SMTP_USER} cfg errs subject body rc
   cfg=$(mktemp) || return 1
-  trap 'rm -f "$cfg"' RETURN
+  errs=$(mktemp) || { rm -f "$cfg"; return 1; }
+  trap 'rm -f "$cfg" "$errs"' RETURN
   chmod 600 "$cfg"
   # Credentials go through a private config file, not the command line (visible in `ps`).
   esc() { printf '%s' "$1" | sed 's/[\\"]/\\&/g'; }
   printf 'user = "%s:%s"\n' "$(esc "$ALERT_SMTP_USER")" "$(esc "$ALERT_SMTP_PASSWORD")" >"$cfg"
   subject=${title//[$'\r\n']/ }
   body=${message//$'\n'/$'\r\n'}
-  printf 'From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n' \
-    "$from" "$ALERT_EMAIL" "$subject" "$(date -R)" "$body" |
-    "$CURL" -sS -m 30 --ssl-reqd -K "$cfg" --mail-from "$from" --mail-rcpt "$ALERT_EMAIL" \
-      -T - "$ALERT_SMTP_URL" >/dev/null
+  printf 'From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s.%s@%s>\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n' \
+    "$from" "$ALERT_EMAIL" "$subject" "$(date -R)" "$(date +%s)" "$$" "${from#*@}" "$body" |
+    "$CURL" -sS -v -m 30 --ssl-reqd -K "$cfg" --mail-from "$from" --mail-rcpt "$ALERT_EMAIL" \
+      -T - "$ALERT_SMTP_URL" >/dev/null 2>"$errs"
+  rc=$?
+  # -v output also holds the encoded login, so show only the server's refusals and curl's error.
+  [ "$rc" -eq 0 ] || grep -E '^(curl: |< [45][0-9][0-9][ -])' "$errs" | tail -6 | sed 's/^/notify: smtp: /' >&2
+  return "$rc"
 }
 
 if [ -n "${ALERT_EMAIL:-}" ]; then

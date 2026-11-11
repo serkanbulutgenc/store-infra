@@ -30,7 +30,9 @@ echo "$*" >>"$CURL_LOG"
 prev=""
 for a in "$@"; do [ "$prev" = "-K" ] && cat "$a" >>"$CURL_LOG.cfg"; prev=$a; done
 case "$*" in *"-T -"*) cat >>"$CURL_LOG.mail" ;; esac
-[ -z "${CURL_FAIL:-}" ] || case "$*" in *"$CURL_FAIL"*) exit 7 ;; esac
+if [ -n "${CURL_FAIL:-}" ]; then case "$*" in *"$CURL_FAIL"*)
+  printf '> AUTH PLAIN SECRETBASE64\n< 550-5.7.1 rejected for test\n< 550 5.7.1 second line\ncurl: (55) DATA failed: 550\n' >&2
+  exit 55 ;; esac; fi
 F
 chmod +x "$work"/fake-* "$work/notify"
 export DOCKER="$work/fake-docker" NOTIFY="$work/notify" SENT="$work/sent" CURL_LOG="$work/curl" ALERT_STATE_DIR="$work/alerts" BACKUP_STATE_DIR="$work/backup"
@@ -109,6 +111,9 @@ grep -q 'push to ntfy FAILED' err && [ -s curl.mail ] || fail "email must still 
 rm -f curl curl.cfg curl.mail
 CURL_FAIL=smtp CURL="$work/fake-curl" scripts/notify.sh "T" "m" 2>err || fail "a failed email must not fail the caller"
 grep -q 'email FAILED' err && grep -q 'ntfy.example' curl || fail "push must still be sent when the email fails"
+grep -q 'notify: smtp: < 550-5.7.1 rejected for test' err && grep -q 'notify: smtp: curl: (55)' err || fail "the server's refusal must be shown: $(cat err)"
+! grep -q 'SECRETBASE64' err || fail "the encoded login must never be printed"
+grep -q '^Message-ID: <[0-9]*\.[0-9]*@example.com>' curl.mail || fail "mail needs a Message-ID: $(cat curl.mail)"
 # ALERT_EMAIL without SMTP settings: say so, send nothing by email
 printf 'NTFY_URL=https://ntfy.example/topic\nALERT_EMAIL=owner@example.com\n' >env/alerts.env
 rm -f curl curl.cfg curl.mail
