@@ -25,7 +25,12 @@ echo "$1 | $2" >>"$SENT"
 F
 cat >"$work/fake-curl" <<'F'
 #!/usr/bin/env bash
+# Logs the arguments, the contents of a -K config file and a message sent on stdin (-T -).
 echo "$*" >>"$CURL_LOG"
+prev=""
+for a in "$@"; do [ "$prev" = "-K" ] && cat "$a" >>"$CURL_LOG.cfg"; prev=$a; done
+case "$*" in *"-T -"*) cat >>"$CURL_LOG.mail" ;; esac
+[ -z "${CURL_FAIL:-}" ] || case "$*" in *"$CURL_FAIL"*) exit 7 ;; esac
 F
 chmod +x "$work"/fake-* "$work/notify"
 export DOCKER="$work/fake-docker" NOTIFY="$work/notify" SENT="$work/sent" CURL_LOG="$work/curl" ALERT_STATE_DIR="$work/alerts" BACKUP_STATE_DIR="$work/backup"
@@ -80,11 +85,37 @@ PROBE_FAIL=api HEARTBEAT_URL=https://hc.example/ping CURL="$work/fake-curl" run 
 [ ! -s curl ] || fail "heartbeat must not be pinged while down"
 : >sent
 
-# notify.sh: pushes to ntfy with title/priority/email; silent success without a channel
+# notify.sh: ntfy push with title and priority (no Email header: ntfy.sh drops anonymous email)
+cat >env/alerts.env <<'E'
+NTFY_URL=https://ntfy.example/topic
+ALERT_EMAIL=owner@example.com
+ALERT_SMTP_URL=smtp://mail.example:587
+ALERT_SMTP_USER=shop@example.com
+ALERT_SMTP_PASSWORD='p"w\d'
+E
+rm -f curl curl.cfg curl.mail
+CURL="$work/fake-curl" scripts/notify.sh "Store: DOWN" $'line one\nline two' 5 2>/dev/null
+grep -q 'Title: Store: DOWN' curl && grep -q 'Priority: 5' curl && grep -q 'https://ntfy.example/topic' curl || fail "ntfy request wrong: $(cat curl)"
+! grep -qi 'Email:' curl || fail "the ntfy request must not carry an Email header"
+# ...and the email goes over SMTP, with credentials only in the private config file
+grep -q 'smtp://mail.example:587' curl && grep -q -- '--ssl-reqd' curl && grep -q -- '--mail-rcpt owner@example.com' curl && grep -q -- '--mail-from shop@example.com' curl || fail "smtp request wrong: $(cat curl)"
+! grep -qF 'w\d' curl || fail "the SMTP password must not be on the command line"
+grep -qF 'user = "shop@example.com:p\"w\\d"' curl.cfg || fail "credentials not quoted in the config file: $(cat curl.cfg)"
+grep -q '^Subject: Store: DOWN' curl.mail && grep -q '^To: owner@example.com' curl.mail && grep -q 'line two' curl.mail || fail "mail content wrong: $(cat curl.mail)"
+# a failed channel is reported, does not stop the other one, and never fails the caller
+rm -f curl curl.cfg curl.mail
+CURL_FAIL=ntfy CURL="$work/fake-curl" scripts/notify.sh "T" "m" 2>err || fail "a failed push must not fail the caller"
+grep -q 'push to ntfy FAILED' err && [ -s curl.mail ] || fail "email must still be sent when the push fails"
+rm -f curl curl.cfg curl.mail
+CURL_FAIL=smtp CURL="$work/fake-curl" scripts/notify.sh "T" "m" 2>err || fail "a failed email must not fail the caller"
+grep -q 'email FAILED' err && grep -q 'ntfy.example' curl || fail "push must still be sent when the email fails"
+# ALERT_EMAIL without SMTP settings: say so, send nothing by email
 printf 'NTFY_URL=https://ntfy.example/topic\nALERT_EMAIL=owner@example.com\n' >env/alerts.env
-CURL="$work/fake-curl" scripts/notify.sh "T" "message" 5 2>/dev/null
-grep -q 'Title: T' curl && grep -q 'Priority: 5' curl && grep -q 'Email: owner@example.com' curl && grep -q 'https://ntfy.example/topic' curl || fail "ntfy request wrong: $(cat curl)"
-: >env/alerts.env; : >curl
+rm -f curl curl.cfg curl.mail
+CURL="$work/fake-curl" scripts/notify.sh "T" "m" 2>err || fail "incomplete SMTP settings must not fail"
+grep -q 'needs ALERT_SMTP_URL' err && [ ! -e curl.mail ] || fail "an incomplete SMTP config must not send mail"
+# no channel at all
+: >env/alerts.env; rm -f curl curl.cfg curl.mail
 CURL="$work/fake-curl" scripts/notify.sh "T" "m" 2>/dev/null || fail "no channel must not fail"
-[ ! -s curl ] || fail "nothing should be sent without NTFY_URL"
+[ ! -e curl ] && [ ! -e curl.mail ] || fail "nothing should be sent without a channel"
 echo OK
