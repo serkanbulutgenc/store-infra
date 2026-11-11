@@ -67,7 +67,10 @@ fi
 
 failed=$("$DOCKER" compose "${COMPOSE_FILES[@]}" exec -T api python manage.py outbox_failed_count 2>/dev/null </dev/null | tr -dc 0-9)
 if [ -z "$failed" ]; then
-  rc=1; alert_once outbox-probe "Store: cannot read the email outbox" "scripts/alerts-check.sh could not run outbox_failed_count in the api container."
+  # While the stack check above already reports an outage, this is the same outage: one page, not two.
+  if [ -z "$down" ]; then
+    rc=1; alert_once outbox-probe "Store: cannot read the email outbox" "scripts/alerts-check.sh could not run outbox_failed_count in the api container."
+  fi
 else
   clear_alert outbox-probe
   seen=$(cat "$STATE/outbox-failed" 2>/dev/null || echo "$failed")   # first look: no alert for history

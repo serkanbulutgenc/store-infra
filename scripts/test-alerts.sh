@@ -13,6 +13,7 @@ cat >"$work/fake-docker" <<'F'
 [ "$(readlink /proc/$$/fd/0)" = /dev/null ] || { case "$*" in *"exec -T"*|*"ps --status"*) echo "probe inherited stdin" >&2; exit 97 ;; esac; }
 failing() { case ",${PROBE_FAIL:-}," in *",$1,"*) return 0 ;; esac; return 1; }
 case "$*" in
+  *"outbox_failed_count"*) [ -n "${OUTBOX_FAIL:-}" ] && exit 1 ;;   # else falls through to the count
   *"exec -T api python -c"*) failing api && exit 1; exit 0 ;;
   *"exec -T web wget"*) failing web && exit 1; exit 0 ;;
   *"ps --status running --services"*) printf 'api\nweb\n'; failing caddy || echo caddy; exit 0 ;;
@@ -58,8 +59,13 @@ run $now 50 2 || fail "same failed count must not alert again"
 [ "$(count 'emails failed')" = 1 ] || fail "failed emails alerted twice"
 run $now 50 3 || true; [ "$(count 'emails failed')" = 2 ] || fail "a further failure must alert"
 
-if DOCKER_DOWN=1 run $now; then fail "unreadable outbox must be flagged"; fi
+# api healthy but the outbox command broken: that is its own problem and is flagged
+if OUTBOX_FAIL=1 run $now; then fail "unreadable outbox must be flagged"; fi
 [ "$(count 'cannot read')" = 1 ] || fail "outbox probe failure not alerted"
+# whole stack down (docker unreadable): one "DOWN" page, and no second "cannot read" page
+if DOCKER_DOWN=1 run $((now + 40000)); then fail "a dead stack must fail the run"; fi
+[ "$(count 'Store: DOWN')" -ge 1 ] || fail "a dead stack must page"
+[ "$(count 'cannot read')" = 1 ] || fail "the outbox alert must stay quiet during a stack outage: $(cat sent)"
 
 echo $((now - 27 * 3600)) >"$BACKUP_STATE_DIR/last-success-db"
 run $now 50 3 || true; [ "$(count 'backup overdue')" = 1 ] || fail "old backup must alert"
