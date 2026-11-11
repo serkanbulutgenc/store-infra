@@ -38,7 +38,9 @@ COMPOSE_FILES=(-f compose.yaml)
 if [ -f .env ] && grep -q '^PROXY_NETWORK=.' .env; then COMPOSE_FILES+=(-f compose.proxy.yaml); fi
 CURL=${CURL:-curl}
 RETRIES=${PROBE_TRIES:-3}; RETRY_WAIT=${PROBE_RETRY_SECONDS:-30}
-dc() { timeout 20 "$DOCKER" compose "${COMPOSE_FILES[@]}" "$@"; }
+# stdin must not be the terminal: `timeout` runs the command in a background process group, so a
+# docker exec that reads the tty is stopped (SIGTTIN) and only the 20 s limit ends it.
+dc() { timeout 20 "$DOCKER" compose "${COMPOSE_FILES[@]}" "$@" </dev/null; }
 probe_stack() { # prints what is not healthy, nothing when all is well
   local down=""
   dc exec -T api python -c "import urllib.request as u; u.urlopen('http://api:5000/health', timeout=5)" >/dev/null 2>&1 || down="api"
@@ -49,6 +51,7 @@ probe_stack() { # prints what is not healthy, nothing when all is well
 down=""
 for ((try = 1; try <= RETRIES; try++)); do
   down=$(probe_stack)
+  echo "alerts-check: stack check $try/$RETRIES: ${down:-healthy}" >&2
   [ -z "$down" ] && break
   [ "$try" -lt "$RETRIES" ] && sleep "$RETRY_WAIT"
 done
@@ -62,7 +65,7 @@ else
   fi
 fi
 
-failed=$("$DOCKER" compose "${COMPOSE_FILES[@]}" exec -T api python manage.py outbox_failed_count 2>/dev/null | tr -dc 0-9)
+failed=$("$DOCKER" compose "${COMPOSE_FILES[@]}" exec -T api python manage.py outbox_failed_count 2>/dev/null </dev/null | tr -dc 0-9)
 if [ -z "$failed" ]; then
   rc=1; alert_once outbox-probe "Store: cannot read the email outbox" "scripts/alerts-check.sh could not run outbox_failed_count in the api container."
 else

@@ -9,6 +9,8 @@ touch "$work/compose.yaml"
 cat >"$work/fake-docker" <<'F'
 #!/usr/bin/env bash
 [ -n "${DOCKER_DOWN:-}" ] && exit 1
+# the probes must not inherit the caller's stdin (a terminal would stop docker exec under timeout)
+[ "$(readlink /proc/$$/fd/0)" = /dev/null ] || { case "$*" in *"exec -T"*|*"ps --status"*) echo "probe inherited stdin" >&2; exit 97 ;; esac; }
 failing() { case ",${PROBE_FAIL:-}," in *",$1,"*) return 0 ;; esac; return 1; }
 case "$*" in
   *"exec -T api python -c"*) failing api && exit 1; exit 0 ;;
@@ -33,7 +35,7 @@ fail() { echo "FAIL: $*"; cat sent 2>/dev/null || true; exit 1; }
 now=2000000000
 echo $((now - 3600)) | tee "$BACKUP_STATE_DIR/last-success-db" >"$BACKUP_STATE_DIR/last-success-media"
 export PROBE_TRIES=1 PROBE_RETRY_SECONDS=0
-run() { NOW=$1 DISK_PERCENT=${2:-50} FAILED_COUNT=${3:-0} scripts/alerts-check.sh 2>/dev/null; }
+run() { printf x | NOW=$1 DISK_PERCENT=${2:-50} FAILED_COUNT=${3:-0} scripts/alerts-check.sh 2>/dev/null; }
 count() { grep -c "$1" sent 2>/dev/null || true; }
 
 run $now || fail "healthy system must pass"
