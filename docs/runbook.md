@@ -1,6 +1,6 @@
 # Runbook
 
-Status: deploy, rollback, server baseline (ticket 33) and backups (ticket 34) are written but not yet exercised on a live server. Other sections are stubs.
+Status: deploy and rollback (ticket 33) were exercised on the live home server on 2026-11-11: `deploy.sh sha-49c4a62 sha-fb6f8f4` came up healthy, `--rollback` restored `sha-653bbcc`. A scan of the common leaked ports showed only 80 and 443 (no `nmap`, so not a full-range scan). The VPS server baseline script has not been run, since this host is a home server. Backups (ticket 34) are written but not yet exercised. Other sections are stubs.
 
 ## Server layout
 
