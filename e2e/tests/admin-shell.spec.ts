@@ -1,21 +1,13 @@
 import { expect, type Page, test } from "@playwright/test";
-import { loginState } from "../support/auth";
-import { seedStaff } from "../support/seed";
+import { useStaffLogin } from "../support/auth";
 
 // The Dashboard shell as a Staff user (an Owner needs TOTP): grouped sidebar, Owner-only items
 // hidden, collapse that survives a reload, keyboard use, breadcrumbs, user menu, mobile menu.
 test.describe.configure({ mode: "serial" });
 
 // One login for the file (see support/auth.ts). The sign-out test goes last: it ends the session.
-let storageState: Awaited<ReturnType<typeof loginState>>;
 
-test.beforeAll(async ({ browser, baseURL }) => {
-  storageState = await loginState(browser, baseURL, seedStaff());
-});
-
-test.beforeEach(async ({ context }) => {
-  await context.addCookies(storageState.cookies);
-});
+useStaffLogin();
 
 async function openDashboard(page: Page) {
   await page.goto("/admin");

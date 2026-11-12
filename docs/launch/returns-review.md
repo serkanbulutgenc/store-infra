@@ -53,30 +53,24 @@ Rules come from [phase 2 section 5](../../../store-backend/docs/spec/phase-2.md)
 
 Template files: `store-backend/store_backend/messaging/templates/messaging/return_*.txt`, `refund_issued.txt`, `order_cancelled.txt`.
 
-## 4. Legal page still to be supplied
+## 4. Legal page
 
-`İade ve Cayma Koşulları` (`store-frontend/src/features/legal/content/returns-withdrawal.md`) is still a **placeholder** with one hygiene line. The lawyer's full text must replace it. Questions for the lawyer:
-
-- Does the text cover the 14-day withdrawal, the hygiene exclusion, who pays return shipping and how refunds are paid (cash or IBAN, timing)?
-- Is the "wrong size / changed mind" return at the Shopper's cost acceptable, and is the refund deadline stated?
-- Does a rejection reason need to cite a legal ground?
+`İade ve Cayma Koşulları` (`store-frontend/src/features/legal/content/returns-withdrawal.md`) now carries the approved text, version 2 (loaded 2026-11-12; the working draft is [returns-legal-draft.md](returns-legal-draft.md)). The text points to the "Hakkımızda / İletişim" page for the seller's details and to the Ön Bilgilendirme Formu for the return carrier, so the carrier name must be set in Store settings (section 7).
 
 ## 5. Return-carrier agreement (item 4a)
 
-Not signed yet (phase 2 section 9). To record once signed:
+Signed; the Owner confirmed it on 2026-11-12.
 
-- Carrier name (goes into Store settings `return_carrier` and the pre-information form): **Aras Kargo** (agreement signed, confirmed by the Owner 2026-11-12)
-- Who pays for defective / wrong-item returns, and the billing route: ______
-- Pickup or drop-off method and any parcel limits: ______
-- Contract date and where the copy is stored: ______
+- Carrier name (goes into Store settings `return_carrier` and the pre-information form): **Aras Kargo**
+- Billing route, pickup or drop-off method, parcel limits, contract date and where the signed copy is kept: not recorded here. The Owner holds the agreement.
 
 ## 6. Sign-off
 
 | Item | Approved by | Date | Notes |
 |------|-------------|------|-------|
 | Sections 1 to 3 wording | Owner (Serkan) | 2026-11-12 | Approved as written; R8 still open (default: Staff choose per line) |
-| Legal page text (section 4) | | | |
-| Carrier agreement (section 5) | | | |
+| Legal page text (section 4) | Owner (Serkan) | 2026-11-12 | Loaded as version 2 |
+| Carrier agreement (section 5) | Owner (Serkan) | 2026-11-12 | Signed; Aras Kargo |
 
 ## 7. After sign-off
 

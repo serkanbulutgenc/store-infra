@@ -1,23 +1,15 @@
 import { expect, type Page, test } from "@playwright/test";
-import { loginState } from "../support/auth";
-import { seedProduct, seedStaff } from "../support/seed";
+import { tab, useStaffLogin } from "../support/auth";
+import { seedProduct } from "../support/seed";
 
 // The product editor as tabs, as a Staff user (cost price and Supplier are Owner-only).
 test.describe.configure({ mode: "serial" });
 
-let storageState: Awaited<ReturnType<typeof loginState>>;
 let product: { id: number; title: string };
 
-test.beforeAll(async ({ browser, baseURL }) => {
+useStaffLogin([], () => {
   product = seedProduct();
-  storageState = await loginState(browser, baseURL, seedStaff());
 });
-
-test.beforeEach(async ({ context }) => {
-  await context.addCookies(storageState.cookies);
-});
-
-const tab = (page: Page, name: string) => page.getByRole("tab", { name: new RegExp(name) });
 
 async function openEditor(page: Page, path = `/admin/products/${product.id}`) {
   await page.goto(path);

@@ -1,28 +1,19 @@
 import { expect, type Page, test } from "@playwright/test";
-import { loginState } from "../support/auth";
-import { seedStaff } from "../support/seed";
+import { tab, useStaffLogin } from "../support/auth";
 
 // Settings is one form over several tabs. The user is Staff with `manage_settings` granted
 // directly, because an Owner needs TOTP to log in.
 test.describe.configure({ mode: "serial" });
 
 // One login for the file (see support/auth.ts).
-let storageState: Awaited<ReturnType<typeof loginState>>;
 
-test.beforeAll(async ({ browser, baseURL }) => {
-  storageState = await loginState(browser, baseURL, seedStaff(["manage_settings"]));
-});
-
-test.beforeEach(async ({ context }) => {
-  await context.addCookies(storageState.cookies);
-});
+useStaffLogin(["manage_settings"]);
 
 async function openSettings(page: Page) {
   await page.goto("/admin/settings");
   await expect(page.getByRole("tab", { name: /Kargo ve ücretler/ })).toBeVisible();
 }
 
-const tab = (page: Page, name: string) => page.getByRole("tab", { name: new RegExp(name) });
 const patches = (page: Page) => {
   const bodies: Record<string, unknown>[] = [];
   page.on("request", (r) => {

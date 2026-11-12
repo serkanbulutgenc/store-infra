@@ -28,6 +28,8 @@ scripts/init-env.sh               # creates env/*.env (mode 600); fill in the bl
 docker compose -f compose.yaml -f compose.dev.yaml up --build
 ```
 
+Emails go to Mailpit at http://localhost:8025. The dev overlay sets `DJANGO_DEV_STACK=True`, `OWNER_MFA_REQUIRED=False` and `EMAIL_USE_TLS=False`; production refuses to start with either of the last two unless `DJANGO_DEV_STACK=True` is set, so never copy them into a server's `env/django.env`. `assign_owner` makes your account an Owner (`docker compose ... exec api python manage.py assign_owner you@example.com`).
+
 ## Production
 
 ```sh
