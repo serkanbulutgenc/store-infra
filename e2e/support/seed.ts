@@ -57,3 +57,28 @@ print("SEEDED " + json.dumps({"slug": product.slug}))
   if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
   return seed;
 }
+
+/**
+ * Only a verified Staff user, for specs that need a Dashboard login and nothing else.
+ * Unlike `seedShop` it leaves the shop settings and catalogue alone.
+ */
+export function seedStaff(): { email: string; password: string } {
+  const run = Date.now().toString(36);
+  const email = `e2e-nav-${run}@example.com`;
+  const password = `E2e-${run}-Pass!9x`;
+  const script = `
+from allauth.account.models import EmailAddress
+from django.contrib.auth.models import Group
+from store_backend.users.models import User
+
+user = User(email=${JSON.stringify(email)}, is_staff=True)
+user.set_password(${JSON.stringify(password)})
+user.save()
+user.groups.add(Group.objects.get(name="Staff"))
+EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+print("SEEDED")
+`;
+  const out = runDjangoScript(script);
+  if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs):\n${out}`);
+  return { email, password };
+}

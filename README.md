@@ -66,6 +66,8 @@ pnpm test                         # E2E_BASE_URL defaults to http://localhost:80
 
 `e2e/tests/checkout.spec.ts` is the guest cash-on-delivery journey: it seeds a product and a Staff user through the api container's Django shell (`e2e/support/seed.ts`), browses, fills the basket, places the order and finds it in the Dashboard. The full page load of `/sepet` after adding to the basket checks that the Start server forwards the guest's session cookie to Django (the SSR cookie hop); if that breaks the basket is empty and the test fails. It also sets the shop-wide COD and shipping fees, so use a throwaway stack; it leaves its seeded product and Staff user behind (names are unique per run).
 
+`e2e/tests/admin-shell.spec.ts` logs in as a seeded Staff user (`seedStaff`, which leaves shop settings alone) and checks the Dashboard shell: grouped sidebar, Owner-only items hidden, collapse persisted across a reload, keyboard use, breadcrumbs, user menu, sign-out and the phone menu.
+
 To reuse the harness for a new test, add a spec under `e2e/tests/`. `e2e/support/stack.ts` has helpers for running commands in service containers (`execInService`) and for reading endpoints Caddy does not publish (`getFromApiContainer`).
 
 CI notes: `scripts/ci-env.sh` writes throwaway env files with random secrets. The workflow checks out `store-backend` and `store-frontend` from the same owner; for private repos add a `CHECKOUT_TOKEN` secret with read access.
