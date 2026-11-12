@@ -60,21 +60,24 @@ print("SEEDED " + json.dumps({"slug": product.slug}))
 
 /**
  * Only a verified Staff user, for specs that need a Dashboard login and nothing else.
+ * `extraPermissions` are granted directly (an Owner needs TOTP, so a Staff user stands in).
  * Unlike `seedShop` it leaves the shop settings and catalogue alone.
  */
-export function seedStaff(): { email: string; password: string } {
+export function seedStaff(extraPermissions: string[] = []): { email: string; password: string } {
   const run = Date.now().toString(36);
   const email = `e2e-nav-${run}@example.com`;
   const password = `E2e-${run}-Pass!9x`;
   const script = `
 from allauth.account.models import EmailAddress
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from store_backend.users.models import User
 
 user = User(email=${JSON.stringify(email)}, is_staff=True)
 user.set_password(${JSON.stringify(password)})
 user.save()
 user.groups.add(Group.objects.get(name="Staff"))
+for codename in ${JSON.stringify(extraPermissions)}:
+    user.user_permissions.add(Permission.objects.get(codename=codename))
 EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
 print("SEEDED")
 `;

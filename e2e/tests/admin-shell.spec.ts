@@ -1,21 +1,24 @@
 import { expect, type Page, test } from "@playwright/test";
+import { loginState } from "../support/auth";
 import { seedStaff } from "../support/seed";
 
 // The Dashboard shell as a Staff user (an Owner needs TOTP): grouped sidebar, Owner-only items
 // hidden, collapse that survives a reload, keyboard use, breadcrumbs, user menu, mobile menu.
 test.describe.configure({ mode: "serial" });
 
-let staff: { email: string; password: string };
+// One login for the file (see support/auth.ts). The sign-out test goes last: it ends the session.
+let storageState: Awaited<ReturnType<typeof loginState>>;
 
-test.beforeAll(() => {
-  staff = seedStaff();
+test.beforeAll(async ({ browser, baseURL }) => {
+  storageState = await loginState(browser, baseURL, seedStaff());
 });
 
-async function login(page: Page) {
-  await page.goto("/admin/login");
-  await page.getByLabel("E-posta", { exact: true }).fill(staff.email);
-  await page.getByLabel("Parola").fill(staff.password);
-  await page.getByRole("button", { name: "Giriş yap" }).click();
+test.beforeEach(async ({ context }) => {
+  await context.addCookies(storageState.cookies);
+});
+
+async function openDashboard(page: Page) {
+  await page.goto("/admin");
   await expect(page).toHaveURL(/\/admin\/?$/);
 }
 
@@ -24,7 +27,7 @@ const nav = (page: Page) => page.getByRole("navigation", { name: "Yönetim" });
 const toggle = (page: Page) => page.getByRole("button", { name: "Kenar çubuğunu aç veya kapat" });
 
 test("Staff see the grouped sidebar without Owner-only items", async ({ page }) => {
-  await login(page);
+  await openDashboard(page);
   const links = nav(page);
 
   for (const group of ["Satış", "Katalog", "Yönetim"]) {
@@ -46,7 +49,7 @@ test("Staff see the grouped sidebar without Owner-only items", async ({ page }) 
 });
 
 test("a group collapses and expands", async ({ page }) => {
-  await login(page);
+  await openDashboard(page);
   const catalogue = nav(page).getByRole("button", { name: "Katalog" });
   const products = nav(page).getByRole("link", { name: "Ürünler", exact: true });
 
@@ -57,7 +60,7 @@ test("a group collapses and expands", async ({ page }) => {
 });
 
 test("the sidebar folds to a rail and stays folded after a reload", async ({ page }) => {
-  await login(page);
+  await openDashboard(page);
   await expect(sidebar(page)).toHaveAttribute("data-state", "expanded");
 
   await toggle(page).click();
@@ -71,7 +74,7 @@ test("the sidebar folds to a rail and stays folded after a reload", async ({ pag
 });
 
 test("the sidebar works from the keyboard and the breadcrumb follows", async ({ page }) => {
-  await login(page);
+  await openDashboard(page);
   const orders = nav(page).getByRole("link", { name: "Siparişler", exact: true });
 
   await orders.focus();
@@ -92,7 +95,7 @@ test("the sidebar works from the keyboard and the breadcrumb follows", async ({ 
 });
 
 test("the user menu opens Security from the keyboard and Esc closes it", async ({ page }) => {
-  await login(page);
+  await openDashboard(page);
   const trigger = page.getByRole("button", { name: "Kullanıcı menüsü" });
 
   await trigger.click();
@@ -114,18 +117,11 @@ test("the user menu opens Security from the keyboard and Esc closes it", async (
   await expect(page).toHaveURL(/\/admin\/security$/);
 });
 
-test("sign out from the user menu returns to the login page", async ({ page }) => {
-  await login(page);
-  await page.getByRole("button", { name: "Kullanıcı menüsü" }).click();
-  await page.getByRole("menuitem", { name: "Çıkış yap" }).click();
-  await expect(page).toHaveURL(/\/admin\/login/);
-});
-
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 800 } });
 
   test("the menu slides in, navigates and closes", async ({ page }) => {
-    await login(page);
+    await openDashboard(page);
     await expect(nav(page)).toBeHidden();
 
     await toggle(page).click();
@@ -140,4 +136,11 @@ test.describe("on a phone", () => {
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
   });
+});
+
+test("sign out from the user menu returns to the login page", async ({ page }) => {
+  await openDashboard(page);
+  await page.getByRole("button", { name: "Kullanıcı menüsü" }).click();
+  await page.getByRole("menuitem", { name: "Çıkış yap" }).click();
+  await expect(page).toHaveURL(/\/admin\/login/);
 });
