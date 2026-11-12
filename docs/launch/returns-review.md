@@ -74,7 +74,7 @@ Not signed yet (phase 2 section 9). To record once signed:
 
 | Item | Approved by | Date | Notes |
 |------|-------------|------|-------|
-| Sections 1 to 3 wording | | | |
+| Sections 1 to 3 wording | Owner (Serkan) | 2026-11-12 | Approved as written; R8 still open (default: Staff choose per line) |
 | Legal page text (section 4) | | | |
 | Carrier agreement (section 5) | | | |
 
