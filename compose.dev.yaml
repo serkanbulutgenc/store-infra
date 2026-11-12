@@ -1,6 +1,7 @@
 # Same stack, real images built from sibling checkouts:
 #   ../store-backend  and  ../../Web/store-frontend (override with BACKEND_DIR / FRONTEND_DIR in .env)
 #   docker compose -f compose.yaml -f compose.dev.yaml up --build
+# Emails go to Mailpit: http://localhost:8025.
 # Needs env/django.env, env/postgres.env and env/web.env (run scripts/init-env.sh).
 services:
   caddy:
@@ -16,12 +17,29 @@ services:
 
   api: &api-dev
     image: store-api:dev
+    environment: &mail-dev
+      EMAIL_HOST: mailpit
+      EMAIL_PORT: "1025"
+      EMAIL_USE_TLS: "False"
+      EMAIL_HOST_USER: ""
+      EMAIL_HOST_PASSWORD: ""
     build:
       context: ${BACKEND_DIR:-../store-backend}
       dockerfile: compose/production/django/Dockerfile
 
   worker:
     image: store-api:dev
+    environment: *mail-dev
 
   beat:
     image: store-api:dev
+    environment: *mail-dev
+
+  # Local mail catcher: every email the shop sends (verification links, order and
+  # return emails) lands in the inbox at http://localhost:${MAILPIT_PORT:-8025}.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    networks: [app]
