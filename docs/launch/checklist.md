@@ -22,7 +22,7 @@ Go-live is blocked until every box is ticked and one restore drill is logged in 
 | 3f | Accountant: KDV rate on shipping and COD fees | | | |
 | 3g | Accountant: KDV class per accessory category | | | |
 | 3h | Accountant: retention beyond 5 years | | | |
-| 4a | Return-carrier agreement signed; carrier named in the pre-information | | | |
+| 4a | Return-carrier agreement signed; carrier named in the pre-information | 2026-11-12 | Owner (Serkan) | Aras Kargo; see [returns-review.md](returns-review.md) |
 | 4b | Retention period for personal data decided | | | |
 | 4c | Real carrier prices and desi values loaded; no dummy values left (see [rates-load.md](rates-load.md), ticket 53) | | | |
 | 5a | Email vendor chosen | | | |
