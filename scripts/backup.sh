@@ -24,6 +24,9 @@ die() { echo "backup: $*" >&2; exit 1; }
 [ -n "${RCLONE_REMOTE:-}" ] || die "RCLONE_REMOTE is not set (env/backup.env)"
 [ -n "${AGE_RECIPIENT:-}" ] || die "AGE_RECIPIENT is not set (env/backup.env)"
 mkdir -p "$STATE"
+# Keep a log under the state directory whatever runs us (cron, systemd, by hand); the
+# journal and the terminal still get the output too.
+exec > >(tee -a "$STATE/backup.log") 2>&1
 
 COMPOSE_FILES=(-f compose.yaml)
 if [ -f .env ] && grep -q '^PROXY_NETWORK=.' .env; then COMPOSE_FILES+=(-f compose.proxy.yaml); fi
