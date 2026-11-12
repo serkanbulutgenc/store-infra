@@ -66,6 +66,8 @@ pnpm test                         # E2E_BASE_URL defaults to http://localhost:80
 
 `e2e/tests/checkout.spec.ts` is the guest cash-on-delivery journey: it seeds a product and a Staff user through the api container's Django shell (`e2e/support/seed.ts`), browses, fills the basket, places the order and finds it in the Dashboard. The full page load of `/sepet` after adding to the basket checks that the Start server forwards the guest's session cookie to Django (the SSR cookie hop); if that breaks the basket is empty and the test fails. It also sets the shop-wide COD and shipping fees, so use a throwaway stack; it leaves its seeded product and Staff user behind (names are unique per run).
 
+`e2e/tests/admin-product.spec.ts` checks the product editor tabs (Staff do not see cost price or Supplier, unsaved edits survive tab switches and save in one request, the old photos URL lands on the Fotoğraflar tab).
+
 `e2e/tests/admin-settings.spec.ts` checks the tabbed Settings form (one PATCH for edits in two tabs; an invalid field in a hidden tab marks it and blocks the save). Specs log in once and reuse the session (`e2e/support/auth.ts`) because the login endpoint allows 10 a minute per IP.
 
 `e2e/tests/admin-shell.spec.ts` logs in as a seeded Staff user (`seedStaff`, which leaves shop settings alone) and checks the Dashboard shell: grouped sidebar, Owner-only items hidden, collapse persisted across a reload, keyboard use, breadcrumbs, user menu, sign-out and the phone menu.

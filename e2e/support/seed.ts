@@ -85,3 +85,29 @@ print("SEEDED")
   if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs):\n${out}`);
   return { email, password };
 }
+
+/** One draft product with a variant, for specs that edit a product. Leaves shop settings alone. */
+export function seedProduct(): { id: number; title: string } {
+  const run = Date.now().toString(36);
+  const title = `E2E Ürün ${run}`;
+  const script = `
+import json
+from oscar.apps.catalogue.models import ProductClass
+from store_backend.services import catalog
+
+colour = catalog.create_colour("E2E Mavi ${run}", "#0000ff")
+category = catalog.create_category("E2E Kat ${run}")
+product = catalog.create_product(
+    title=${JSON.stringify(title)},
+    product_class=ProductClass.objects.get(name="Giyim"),
+    category=category,
+    shelf_price="100.00",
+)
+catalog.create_variant(product, colour=colour, size="M", stock=3)
+print("SEEDED " + json.dumps({"id": product.id}))
+`;
+  const out = runDjangoScript(script);
+  const match = out.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs):\n${out}`);
+  return { id: (JSON.parse(match[1]) as { id: number }).id, title };
+}
