@@ -78,9 +78,18 @@ Not signed yet (phase 2 section 9). To record once signed:
 | Legal page text (section 4) | | | |
 | Carrier agreement (section 5) | | | |
 
-## 7. After sign-off (to do)
+## 7. After sign-off
 
-1. Replace `returns-withdrawal.md` with the approved text and bump its `version` in `features/legal/pages.ts`, together with the Store setting on deploy.
-2. Set `return_carrier` in Store settings.
-3. Fill checklist 1b and 4a with date, name and a link to this file.
-4. Close ticket 59.
+Done on 2026-11-12 in the repos: approved text loaded into `returns-withdrawal.md`, its `version` set to 2 in `features/legal/pages.ts`, checklist 4a ticked. Aras Kargo is the return carrier.
+
+Still to do **in production** (the local stack was done the same way):
+
+1. Deploy the frontend that carries the new text.
+2. Dashboard → Settings: set the return carrier to "Aras Kargo".
+3. Set the Legal page version. The Dashboard tab only shows versions, so use the api container's shell as the Owner:
+
+   ```sh
+   docker compose -f compose.yaml exec api python manage.py shell -c "from store_backend.users.models import User; from store_backend.services import shop_settings as s; u=User.objects.get(email='OWNER@EMAIL'); print(s.update(u, legal_versions={'returns_withdrawal':'2'}).legal_versions)"
+   ```
+
+4. Fill checklist 1b once the pre-information form and privacy notice are also approved and loaded.
