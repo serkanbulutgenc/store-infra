@@ -23,6 +23,7 @@ services:
       EMAIL_USE_TLS: "False"
       EMAIL_HOST_USER: ""
       EMAIL_HOST_PASSWORD: ""
+      DJANGO_DEV_STACK: "True"  # lets the relaxations in this stack pass the production guard
       OWNER_MFA_REQUIRED: "False"  # local only: no authenticator app needed
     build:
       context: ${BACKEND_DIR:-../store-backend}
