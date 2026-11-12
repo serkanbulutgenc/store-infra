@@ -65,7 +65,7 @@ Template files: `store-backend/store_backend/messaging/templates/messaging/retur
 
 Not signed yet (phase 2 section 9). To record once signed:
 
-- Carrier name (goes into Store settings `return_carrier` and the pre-information form): ______
+- Carrier name (goes into Store settings `return_carrier` and the pre-information form): **Aras Kargo** (named by the Owner 2026-11-12; agreement signing not yet confirmed)
 - Who pays for defective / wrong-item returns, and the billing route: ______
 - Pickup or drop-off method and any parcel limits: ______
 - Contract date and where the copy is stored: ______
