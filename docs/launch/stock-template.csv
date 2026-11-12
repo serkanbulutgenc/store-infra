@@ -1,1 +1,4 @@
-product_name,category,brand,supplier,colour,size,shelf_price_try,kdv_class,quantity,notes
+product_name,category,product_class,colour,size,shelf_price_try,quantity,brand,supplier,sku,kdv_class,notes
+Çiçekli Elbise,Kadın > Elbise,Giyim,Siyah,M,499.90,5,Aura Moda,Tedarikçi A,,,Örnek satır: silin
+Çiçekli Elbise,Kadın > Elbise,Giyim,Siyah,L,499.90,3,Aura Moda,Tedarikçi A,,,
+Çiçekli Elbise,Kadın > Elbise,Giyim,Kırmızı,M,519.90,2,Aura Moda,Tedarikçi A,,,
