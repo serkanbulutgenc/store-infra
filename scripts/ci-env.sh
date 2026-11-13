@@ -24,7 +24,6 @@ ENV
 cat > env/django.env <<ENV
 DJANGO_SETTINGS_MODULE=config.settings.production
 DJANGO_SECRET_KEY=$(rand)
-DJANGO_ADMIN_URL=admin/
 DJANGO_ALLOWED_HOSTS=localhost,api
 DJANGO_FRONTEND_ORIGIN=http://localhost:8080
 DJANGO_SECURE_SSL_REDIRECT=False
