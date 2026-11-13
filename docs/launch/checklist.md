@@ -36,3 +36,32 @@ Go-live is blocked until every box is ticked and one restore drill is logged in 
 ## Blockers to clear first
 
 Tickets 32 to 36 are closed (33 and 35 on 2026-11-11). What still gates go-live is the checklist above, including the logged restore drill.
+
+## Phase 2 release: Legal pages, then Admin features (tickets 60-68)
+
+Not part of the PRD list above, but each step needs evidence before the release counts as done. Plan: release 60-62 (Legal pages) on their own first, then 63-68 as one batch. The backend must be live before the frontend: the new storefront calls endpoints the old backend does not have.
+
+**Before each release**
+- [ ] Nightly backup is fresh, or run `scripts/backup.sh` by hand; note the file name.
+- [ ] Backend tests green on the commit being released; frontend `tsc`, `biome` and `vitest` green.
+- [ ] `store-backend` and `store-frontend` pushed; the `publish.yml` runs finished and the `sha-` or `v*` tags exist in ghcr.
+- [ ] Outside trading hours.
+
+**Release**
+- [ ] On the server: `git pull`, then `scripts/deploy.sh <tag>` with api and web on the same tag. It runs `migrate` with the new api image and rolls back on a failed health check.
+- [ ] Note the tag in [decisions.md](decisions.md) and the previous tag from `.deploy/current`, in case `--rollback` is needed.
+- [ ] Rollback does not undo migrations. The 63-68 migrations add tables and columns only, so the old release keeps working on the new schema for one deploy.
+
+**After the 63-68 release, check by hand as the Owner and as Staff**
+- [ ] Product classes (63): Owner can create one from an existing size scheme; Staff cannot see the screen.
+- [ ] Attributes (64): a value saved on a Product shows in the product page block and as a filter.
+- [ ] Variants (65): the matrix generator and the stock grid work; stock changes appear in the Audit log.
+- [ ] Categories (66): reorder by drag and drop changes the storefront menu; a hidden Category's URL gives 404.
+- [ ] Favorites (67): heart as a Shopper, as a guest (login, then return with the heart applied) and see the list in the account area. A Dashboard login gets 403 on the Favorites API.
+- [ ] Reviews (68): after a delivered test order, a star-only rating shows at once; a text review waits in Dashboard "Yorumlar" and shows after approval; delete a test review.
+- [ ] Error tracking (Bugsink) shows no new errors for 30 minutes after the release.
+
+**Open items these features add to the PRD list**
+- Item 4b (personal-data retention): decide it together with the Reviews and Favorites rules. Both are deleted when an account is deleted (ADR 0004).
+- Item 1a/1b: the privacy notice should mention that a review shows the first name and last initial publicly, and that Favorites are stored. Ask the lawyer before the Reviews release goes public.
+- Item 7: the matrix generator and bulk stock grid (65) can speed up the stock load in [stock-load.md](stock-load.md).
