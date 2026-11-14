@@ -25,6 +25,8 @@ services:
       EMAIL_HOST_PASSWORD: ""
       DJANGO_DEV_STACK: "True"  # lets the relaxations in this stack pass the production guard
       OWNER_MFA_REQUIRED: "False"  # local only: no authenticator app needed
+      # Django's CSRF trust and the links in emails; env/django.env has the production origin.
+      DJANGO_FRONTEND_ORIGIN: "http://localhost:${HTTP_PORT:-8080}"
     build:
       context: ${BACKEND_DIR:-../store-backend}
       dockerfile: compose/production/django/Dockerfile
