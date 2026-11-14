@@ -65,6 +65,7 @@ Not part of the PRD list above, but each step needs evidence before the release 
 - [ ] Category delete (69, 73): a Category with children or Products is refused with the counts; an empty one is deleted, its URL gives 404 and its image files are gone.
 - [ ] Other deletes (71, 73): Brand, Supplier, Colour, Variant and Product each delete when unreferenced and are refused with a count when referenced; the last Variant of a published Product cannot be deleted; each delete appears in the Audit log. Staff see no delete buttons and get 403 on the API.
 - [ ] Drag and drop (74): as Owner, drag a Category before, after and inside another; the Storefront menu follows at once. Its own subtree and drops past depth 5 are dimmed. By keyboard: Space on the handle, arrows, Space to drop. As Staff, reordering works and a drop that changes the parent does nothing.
+- [ ] Category menu: on desktop, hovering a top-level Category opens a panel of its sub-categories as thumbnail cards with their children listed beneath; a Category without an image shows a plain tile; one without children is a plain link. On a phone, the hamburger opens a drawer that drills down and back. A hidden Category and a Category whose image is still processing show no thumbnail. The backend must be live first: the menu reads `image_url` from `/api/store/categories?depth=3`.
 - [ ] Error tracking (Bugsink) shows no new errors for 30 minutes after the release.
 
 **Open items these features add to the PRD list**
