@@ -26,7 +26,10 @@ Builds from `../store-backend` and `../../Web/store-frontend` (change `BACKEND_D
 ```sh
 scripts/init-env.sh               # creates env/*.env (mode 600); fill in the blanks
 docker compose -f compose.yaml -f compose.dev.yaml up --build
+docker compose -f compose.yaml -f compose.dev.yaml exec api python manage.py migrate   # first start, and after pulling new migrations
 ```
+
+The api's `/start` does not migrate (only `scripts/deploy.sh` does), so a fresh database stays empty until you run `migrate`; until then `beat` crash-loops and the API returns 500s. Postgres only reads `POSTGRES_PASSWORD` when it first creates the volume: if you regenerate `env/postgres.env` afterwards, the services fail with "password authentication failed", so reset the dev database with `docker compose -f compose.yaml -f compose.dev.yaml down -v` (this deletes its data).
 
 Emails go to Mailpit at http://localhost:8025. The dev overlay sets `DJANGO_DEV_STACK=True`, `OWNER_MFA_REQUIRED=False` and `EMAIL_USE_TLS=False`; production refuses to start with either of the last two unless `DJANGO_DEV_STACK=True` is set, so never copy them into a server's `env/django.env`. `assign_owner` makes your account an Owner (`docker compose ... exec api python manage.py assign_owner you@example.com`).
 
