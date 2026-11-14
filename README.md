@@ -77,6 +77,8 @@ pnpm test                         # E2E_BASE_URL defaults to http://localhost:80
 
 `e2e/tests/admin-shell.spec.ts` logs in as a seeded Staff user (`seedStaff`, which leaves shop settings alone) and checks the Dashboard shell: grouped sidebar, Owner-only items hidden, collapse persisted across a reload, keyboard use, breadcrumbs, user menu, sign-out and the phone menu.
 
+`e2e/tests/storefront-infinite-scroll.spec.ts` seeds a 30-product category and checks the listing: scrolling loads the second page and ends with a message, the load-more control is a `rel="next"` link, a deep `?page=2` renders both pages, sorting resets the page, and Back from a product returns to the loaded list.
+
 To reuse the harness for a new test, add a spec under `e2e/tests/`. `e2e/support/stack.ts` has helpers for running commands in service containers (`execInService`) and for reading endpoints Caddy does not publish (`getFromApiContainer`).
 
 CI notes: `scripts/ci-env.sh` writes throwaway env files with random secrets. The workflow checks out `store-backend` and `store-frontend` from the same owner; for private repos add a `CHECKOUT_TOKEN` secret with read access.

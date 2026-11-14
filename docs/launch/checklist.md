@@ -39,7 +39,7 @@ Tickets 32 to 36 are closed (33 and 35 on 2026-11-11). What still gates go-live 
 
 ## Phase 2 release: Legal pages, then Admin features (tickets 60-74)
 
-Not part of the PRD list above, but each step needs evidence before the release counts as done. Plan: release 60-62 (Legal pages) on their own first, then 63-74 as one batch (63-68 admin features, 69-74 category tree and deletes). The backend must be live before the frontend: the new storefront calls endpoints the old backend does not have.
+Not part of the PRD list above, but each step needs evidence before the release counts as done. Plan: release 60-62 (Legal pages) on their own first, then 63-75 as one batch (63-68 admin features, 69-74 category tree and deletes, 75 infinite scroll). The backend must be live before the frontend: the new storefront calls endpoints the old backend does not have.
 
 **Before each release**
 - [ ] Nightly backup is fresh, or run `scripts/backup.sh` by hand; note the file name.
@@ -52,7 +52,7 @@ Not part of the PRD list above, but each step needs evidence before the release 
 - [ ] Note the tag in [decisions.md](decisions.md) and the previous tag from `.deploy/current`, in case `--rollback` is needed.
 - [ ] Rollback does not undo migrations. The 63-68 migrations add tables and columns, plus data migrations that grant the new permissions to the Owner role (`staff` 0006, 0007) and backfill category profiles (`catalog` 0007). The 69-74 migrations (`staff` 0008 `restructure_categories`, 0009 `delete_catalogue`) only add a permission and grant it to the Owner. None removes anything, so the old release keeps working on the new schema for one deploy. One caveat for 69-70: the old backend assumes two category levels. Once a Category exists at depth 3 or deeper, a rollback leaves the old menu and browse code facing a tree it cannot show, so before using `--rollback` move or delete the deeper Categories. The 60-62 release is different: `shop` 0011 drops `StoreSettings.legal_versions`, so the old image cannot run after it. Take the backup first.
 
-**After the 63-74 release, check by hand as the Owner and as Staff**
+**After the 63-75 release, check by hand as the Owner and as Staff**
 - [ ] Product classes (63): Owner can create one from an existing size scheme; Staff cannot see the screen.
 - [ ] Attributes (64): a value saved on a Product shows in the product page block and as a filter.
 - [ ] Variants (65): the matrix generator and the stock grid work; stock changes appear in the Audit log.
@@ -66,6 +66,7 @@ Not part of the PRD list above, but each step needs evidence before the release 
 - [ ] Other deletes (71, 73): Brand, Supplier, Colour, Variant and Product each delete when unreferenced and are refused with a count when referenced; the last Variant of a published Product cannot be deleted; each delete appears in the Audit log. Staff see no delete buttons and get 403 on the API.
 - [ ] Drag and drop (74): as Owner, drag a Category before, after and inside another; the Storefront menu follows at once. Its own subtree and drops past depth 5 are dimmed. By keyboard: Space on the handle, arrows, Space to drop. As Staff, reordering works and a drop that changes the parent does nothing.
 - [ ] Category menu: on desktop, hovering a top-level Category opens a panel of its sub-categories as thumbnail cards with their children listed beneath; a Category without an image shows a plain tile; one without children is a plain link. On a phone, the hamburger opens a drawer that drills down and back. A hidden Category and a Category whose image is still processing show no thumbnail. The backend must be live first: the menu reads `image_url` from `/api/store/categories?depth=3`.
+- [ ] Infinite scroll (75): on a category with more than 24 products, scrolling to the end loads the next page without a click and `?page=2` appears in the address bar; Back from a product returns to the loaded list; the sort menu has "İsim: A-Z" (Turkish letters in order) and "En yüksek puan" (unrated last). The backend must be live first: the new sorts are rejected by the old API.
 - [ ] Error tracking (Bugsink) shows no new errors for 30 minutes after the release.
 
 **Open items these features add to the PRD list**
