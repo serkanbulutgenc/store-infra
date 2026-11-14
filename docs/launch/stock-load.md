@@ -9,7 +9,7 @@ Required: `product_name`, `category`, `product_class`, `colour`, `size`, `shelf_
 | Column | Meaning |
 |---|---|
 | `product_name` | Rows with the same name and category become variants of one Product. |
-| `category` | `Kadın` or `Kadın > Elbise` (two levels at most). Created on confirm if missing. |
+| `category` | `Kadın`, `Kadın > Elbise` or a longer path (up to five levels). Missing categories, including every missing ancestor, are created on confirm. |
 | `product_class` | `Giyim`, `Ayakkabı` or `İç Giyim` (and any other class in the Dashboard). Fixes the size list and default KDV. |
 | `colour` | Must already exist under Renkler (a colour needs a swatch). |
 | `size` | Must be in the class's size list, for example `S`, `M`, `38`, `75B`, `Tek Ebat`. |
