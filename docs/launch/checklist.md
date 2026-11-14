@@ -50,7 +50,7 @@ Not part of the PRD list above, but each step needs evidence before the release 
 **Release**
 - [ ] On the server: `git pull`, then `scripts/deploy.sh <tag>` with api and web on the same tag. It runs `migrate` with the new api image and rolls back on a failed health check.
 - [ ] Note the tag in [decisions.md](decisions.md) and the previous tag from `.deploy/current`, in case `--rollback` is needed.
-- [ ] Rollback does not undo migrations. The 63-68 migrations add tables and columns only, so the old release keeps working on the new schema for one deploy.
+- [ ] Rollback does not undo migrations. The 63-68 migrations add tables and columns, plus data migrations that grant the new permissions to the Owner role (`staff` 0006, 0007) and backfill category profiles (`catalog` 0007). None removes anything, so the old release keeps working on the new schema for one deploy. The 60-62 release is different: `shop` 0011 drops `StoreSettings.legal_versions`, so the old image cannot run after it. Take the backup first.
 
 **After the 63-68 release, check by hand as the Owner and as Staff**
 - [ ] Product classes (63): Owner can create one from an existing size scheme; Staff cannot see the screen.
