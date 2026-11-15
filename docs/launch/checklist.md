@@ -69,6 +69,13 @@ Not part of the PRD list above, but each step needs evidence before the release 
 - [ ] Infinite scroll (75): on a category with more than 24 products, scrolling to the end loads the next page without a click and `?page=2` appears in the address bar; Back from a product returns to the loaded list; the sort menu has "İsim: A-Z" (Turkish letters in order) and "En yüksek puan" (unrated last). The backend must be live first: the new sorts are rejected by the old API.
 - [ ] Error tracking (Bugsink) shows no new errors for 30 minutes after the release.
 
+**Vouchers (issues #1-#5), after release**
+- [ ] Voucher (#1, #2): as Owner create a percentage and a fixed Voucher; Staff see no Voucher screens but see the applied Voucher on an Order.
+- [ ] Checkout (#3): as Guest and as Customer apply a Voucher; the discount line shows in cart, Pre-information snapshot and confirmation; shipping follows the threshold before the Voucher.
+- [ ] Limits (#1): an expired, exhausted and below-minimum Voucher are refused; "once per Customer" blocks a second use by the same account or Guest email.
+- [ ] Cancel (#1): cancelling an Order releases its Redemption.
+- [ ] Return (#4): a refund equals what the Shopper paid, net of the Voucher share.
+
 **Open items these features add to the PRD list**
 - Item 4b (personal-data retention): decide it together with the Reviews and Favorites rules. Both are deleted when an account is deleted (ADR 0004).
 - Item 1a/1b: the privacy notice should mention that a review shows the first name and last initial publicly, and that Favorites are stored. Ask the lawyer before the Reviews release goes public.
