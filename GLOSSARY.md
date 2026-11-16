@@ -28,5 +28,9 @@ _Avoid_: single-size, sizeless
 **Photo**:
 A picture of a Product. It belongs to a Colour, or is shared by all Colours.
 
+**Description**:
+The formatted text a Product shows on its detail page, written by Owner or Staff. It can contain headings, lists, links, images and tables. Compact views (quick view, listing cards) show only a plain-text excerpt of it.
+_Avoid_: Details, body
+
 **Thumbnail**:
 A small Photo shown beside the main Photo so the customer can switch which one is large. Shown only when the selected Colour has more than one Photo.

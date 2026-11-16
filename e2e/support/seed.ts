@@ -258,3 +258,41 @@ print("SEEDED")
   if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
   return { title };
 }
+
+export interface DescriptionSeed {
+  id: number;
+  title: string;
+  slug: string;
+}
+
+/**
+ * One published product with stock and no description, for the Description editor specs: they
+ * write it in the Dashboard and read it on the Storefront. Leaves shop settings alone.
+ */
+export function seedDescriptionProduct(): DescriptionSeed {
+  const run = Date.now().toString(36);
+  const title = `E2E Açıklama ${run}`;
+  const script = `
+import json
+from oscar.apps.catalogue.models import ProductClass
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog
+
+colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Yeşil ${run}`)}, "#00aa00")
+category = catalog.create_category("E2E Açıklama ${run}")
+product = catalog.create_product(
+    title=${JSON.stringify(title)},
+    product_class=ProductClass.objects.get(name="Giyim"),
+    category=category,
+    shelf_price="100.00",
+)
+catalog.create_variant(product, colour=colour, size="M", stock=10)
+ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+print("SEEDED " + json.dumps({"id": product.id, "slug": product.slug}))
+`;
+  const out = runDjangoScript(script);
+  const match = out.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
+  const { id, slug } = JSON.parse(match[1]) as { id: number; slug: string };
+  return { id, title, slug };
+}
