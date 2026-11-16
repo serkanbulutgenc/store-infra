@@ -16,8 +16,16 @@ test.beforeAll(() => {
   const out = runDjangoScript(`
 from store_backend.catalog.models import CategoryProfile
 from store_backend.services import catalog
+from store_backend.shop.models import Menu, MenuItem
 root = catalog.create_category(${JSON.stringify(n.root)})
-catalog.create_category(${JSON.stringify(n.plain)})
+plain = catalog.create_category(${JSON.stringify(n.plain)})
+# The Header menu is the Owner's list now: a new Category shows only once an item points at it.
+header = Menu.objects.get(key="header")
+for position, category in ((910, root), (911, plain)):
+    MenuItem.objects.create(
+        menu=header, position=position, target_type="category",
+        category=category, include_subcategories=True,
+    )
 with_image = catalog.create_category(${JSON.stringify(n.withImage)}, root)
 catalog.create_category(${JSON.stringify(n.noImage)}, root)
 catalog.create_category(${JSON.stringify(n.leaf)}, with_image)
