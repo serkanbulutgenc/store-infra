@@ -45,6 +45,14 @@ jobs:
         working-directory: store-infra
         run: docker compose -f compose.yaml -f compose.dev.yaml build
 
+      # `web` is only healthy once the API can answer, and a fresh database has no tables yet,
+      # so migrate before waiting on the whole stack (as scripts/deploy.sh does).
+      - name: Start the data services and migrate
+        working-directory: store-infra
+        run: |
+          docker compose -f compose.yaml -f compose.dev.yaml up -d --wait --wait-timeout 120 postgres redis
+          docker compose -f compose.yaml -f compose.dev.yaml run --rm --no-deps api python manage.py migrate --noinput
+
       - name: Start the stack and wait for healthchecks
         working-directory: store-infra
         run: docker compose -f compose.yaml -f compose.dev.yaml up -d --wait --wait-timeout 240

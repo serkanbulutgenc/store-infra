@@ -56,12 +56,13 @@ print("REMOVED", MenuItem.objects.filter(**{"${field}": ${JSON.stringify(title)}
 const dialog = (page: Page) => page.getByRole("dialog");
 const del = (page: Page, name: string) =>
   page.getByRole("button", { name: `${name} sil`, exact: true });
-/** The Product editor hydrates after it paints, and a click before that does nothing: click
- * again until the dialog is up. */
-const openDelete = (page: Page, name: string) =>
+/** The Product editor hydrates after it paints: an early click does nothing, and a dialog opened
+ * before hydration can be thrown away by it. Retry opening it until it holds `text`. */
+const openDelete = (page: Page, name: string, text?: string | RegExp) =>
   expect(async () => {
     await del(page, name).click();
     await expect(dialog(page)).toBeVisible({ timeout: 1500 });
+    if (text) await expect(dialog(page)).toContainText(text, { timeout: 1500 });
   }).toPass();
 const confirm = (page: Page) =>
   dialog(page).getByRole("button", { name: "Sil", exact: true }).click();
@@ -107,8 +108,7 @@ test.describe("Owner", () => {
   test("a Product in a Menu is refused until its Menu item is removed", async ({ page }) => {
     await page.goto(`/admin/products?q=${encodeURIComponent(n.product)}`);
     await page.getByRole("link", { name: n.product }).click();
-    await openDelete(page, n.product);
-    await expect(dialog(page)).toContainText("1 menü öğesi");
+    await openDelete(page, n.product, "1 menü öğesi");
     await confirm(page);
     await expect(dialog(page).getByRole("alert")).toContainText("1 menü öğesi");
     await dialog(page).getByRole("button", { name: "Vazgeç" }).click();
