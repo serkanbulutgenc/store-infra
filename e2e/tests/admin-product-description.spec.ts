@@ -133,3 +133,28 @@ test("a file that is not an image is refused and the text is left alone", async 
   await expect(page.getByText("Yalnızca JPEG, PNG veya WebP dosyaları yüklenebilir.")).toBeVisible();
   await expect(area(page)).toHaveValue("değişmez");
 });
+
+test("a wide table scrolls inside its own box on a phone, not the whole page", async ({ page }) => {
+  const cells = (cell: string) => `| ${Array.from({ length: 8 }, () => cell).join(" | ")} |`;
+  await openDescription(page);
+  await area(page).fill(
+    [cells("Çok uzun bir sütun başlığı"), cells("---"), cells("Çok uzun bir hücre değeri")].join("\n"),
+  );
+  await page.getByRole("button", { name: "Kaydet" }).click();
+  await expect(page.getByText("Ürün kaydedildi.")).toBeVisible();
+
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(`/urun/${product.slug}`);
+  await page.getByRole("tab", { name: "Açıklama" }).click();
+  const box = page.getByRole("tabpanel", { name: "Açıklama" }).locator(".overflow-x-auto");
+  await expect(box.getByRole("table")).toBeVisible();
+
+  const sizes = await box.evaluate((el: HTMLElement) => ({
+    inner: el.clientWidth,
+    content: el.scrollWidth,
+    page: document.documentElement.scrollWidth,
+    window: window.innerWidth,
+  }));
+  expect(sizes.content).toBeGreaterThan(sizes.inner); // the table is wider than its box...
+  expect(sizes.page).toBeLessThanOrEqual(sizes.window); // ...and the page does not grow with it
+});

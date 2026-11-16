@@ -4,7 +4,7 @@ Use the Dashboard bulk import (Owner only): **Dashboard, Katalog, İçe aktar**.
 
 ## Columns
 
-Required: `product_name`, `category`, `product_class`, `colour`, `size`, `shelf_price_try`, `quantity`. Optional: `brand`, `supplier`, `sku`, `kdv_class`, `notes`. The file is UTF-8 CSV (comma, semicolon or tab separated); an Excel "CSV UTF-8" export works. Prices may be `199.90` or `199,90`.
+Required: `product_name`, `category`, `product_class`, `colour`, `size`, `shelf_price_try`, `quantity`. Optional: `brand`, `supplier`, `sku`, `kdv_class`, `description`, `notes`. The file is UTF-8 CSV (comma, semicolon or tab separated); an Excel "CSV UTF-8" export works. Prices may be `199.90` or `199,90`.
 
 | Column | Meaning |
 |---|---|
@@ -18,6 +18,7 @@ Required: `product_name`, `category`, `product_class`, `colour`, `size`, `shelf_
 | `brand`, `supplier` | Created on confirm if missing. |
 | `sku` | Optional. Matches an existing variant by SKU; empty means match by product name, colour and size, and a new variant gets a generated SKU. |
 | `kdv_class` | Empty uses the class default. A percentage (`20`) overrides it for the product (accessories). |
+| `description` | The product's Açıklama, in Markdown (bold, lists, links, tables), at most 5000 characters. Rows of one product may repeat it; the first non-empty one is used. Without this column, existing descriptions are left alone; with it, a product whose rows are all empty gets its description cleared. Put cells that contain line breaks in quotes. |
 | `notes` | Ignored. |
 
 ## Steps
