@@ -51,8 +51,12 @@ test("the featured slider shows the newest product and a thumbnail picks another
 test("the slider arrows move between slides", async ({ page }) => {
   await page.goto("/");
   const thumbs = hero(page).getByRole("button", { name: /^Ana Sayfa/ });
-  await hero(page).getByRole("button", { name: "Sonraki" }).click();
-  await expect(thumbs.nth(1)).toHaveAttribute("aria-current", "true");
+  // The slider paints before it hydrates, and a click before that does nothing: click again
+  // until the slide moves.
+  await expect(async () => {
+    await hero(page).getByRole("button", { name: "Sonraki" }).click();
+    await expect(thumbs.nth(1)).toHaveAttribute("aria-current", "true", { timeout: 1500 });
+  }).toPass();
   await hero(page).getByRole("button", { name: "Önceki" }).click();
   await expect(thumbs.first()).toHaveAttribute("aria-current", "true");
 });
