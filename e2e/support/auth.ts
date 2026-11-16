@@ -45,3 +45,21 @@ export function useStaffLogin(extraPermissions: string[] = [], before?: () => vo
 /** A Dashboard tab by (part of) its name. */
 export const tab = (page: Page, name: string) =>
   page.getByRole("tab", { name: new RegExp(name) });
+
+/** Log a Customer in at the Storefront's login page and return the browser storage state. */
+export async function loginCustomerState(
+  browser: Browser,
+  baseURL: string | undefined,
+  user: { email: string; password: string },
+) {
+  const context = await browser.newContext({ baseURL, locale: "tr-TR" });
+  const page = await context.newPage();
+  await page.goto("/hesap/giris");
+  await page.getByLabel("E-posta", { exact: true }).fill(user.email);
+  await page.getByLabel("Parola").fill(user.password);
+  await page.getByRole("button", { name: "Giriş yap" }).click();
+  await expect(page).not.toHaveURL(/\/hesap\/giris/);
+  const state = await context.storageState();
+  await context.close();
+  return state;
+}
