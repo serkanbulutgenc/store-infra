@@ -15,8 +15,13 @@ import json
 from oscar.apps.catalogue.models import ProductClass
 from store_backend.catalog.models import ProductProfile, ProductStatus
 from store_backend.services import catalog
+from store_backend.shop.models import Menu, MenuItem
 
 category = catalog.create_category(${JSON.stringify(categoryName)})
+# The Header menu is the Owner's list: a new Category shows only once an item points at it.
+MenuItem.objects.create(
+    menu=Menu.objects.get(key="header"), position=940, target_type="category", category=category,
+)
 colour = catalog.create_colour("Kaydırma Siyah ${run}", "#000000")
 klass = ProductClass.objects.get(name="Giyim")
 for i in range(1, ${COUNT} + 1):
