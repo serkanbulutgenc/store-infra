@@ -57,8 +57,7 @@ test("a guest uses the voucher in the cart and at checkout", async ({ page }) =>
 
   await page.goto("/ara");
   await page.getByRole("link", { name: new RegExp(seed.title) }).first().click();
-  await page.getByRole("button", { name: seed.size, exact: true }).click();
-  await page.getByRole("button", { name: "Sepete ekle" }).click();
+  await page.getByRole("button", { name: "Sepete ekle", exact: true }).click();
   await expect(page.getByText("Ürün sepete eklendi.")).toBeVisible();
 
   // A full load of the cart keeps the basket and takes a lowercase code.

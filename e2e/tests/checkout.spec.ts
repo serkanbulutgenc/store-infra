@@ -23,9 +23,8 @@ test("a guest browses, fills a basket and places a COD order", async ({ page }) 
   await page.getByRole("link", { name: new RegExp(seed.title) }).first().click();
   await expect(page.getByRole("heading", { name: seed.title })).toBeVisible();
 
-  // Add to the basket.
-  await page.getByRole("button", { name: seed.size, exact: true }).click();
-  await page.getByRole("button", { name: "Sepete ekle" }).click();
+  // Add to the basket: the seeded product is one-size, so there is no size to pick.
+  await page.getByRole("button", { name: "Sepete ekle", exact: true }).click();
   await expect(page.getByText("Ürün sepete eklendi.")).toBeVisible();
 
   // SSR cookie hop: a full load of /sepet must still know this guest's basket.

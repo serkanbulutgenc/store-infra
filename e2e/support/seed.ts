@@ -208,3 +208,53 @@ print("RESET")
 `);
   if (!out.includes("RESET")) throw new Error(`could not reset the checkout limit:\n${out}`);
 }
+
+export interface GallerySeed {
+  title: string;
+}
+
+/**
+ * A published product with two sizes (S, M) in one colour and three photos, for the product page:
+ * the size picker, the thumbnail column and the tabs. The photos are generated and processed
+ * in the script itself (no worker round trip). Leaves shop settings alone.
+ */
+export function seedGalleryProduct(): GallerySeed {
+  const run = Date.now().toString(36);
+  const title = `E2E Galeri ${run}`;
+  const script = `
+import io
+from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
+from oscar.apps.catalogue.models import ProductClass
+from PIL import Image
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog, media
+from store_backend.users.models import User
+
+actor = User(email="e2e-gallery-${run}@example.com", is_staff=True)
+actor.set_password("E2e-${run}-Pass!9x")
+actor.save()
+actor.groups.add(Group.objects.get(name="Staff"))
+
+colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Lacivert ${run}`)}, "#001f3f")
+category = catalog.create_category("E2E Galeri ${run}")
+product = catalog.create_product(
+    title=${JSON.stringify(title)},
+    product_class=ProductClass.objects.get(name="Giyim"),
+    category=category,
+    shelf_price="100.00",
+)
+catalog.create_variant(product, colour=colour, size="S", stock=10)
+catalog.create_variant(product, colour=colour, size="M", stock=10)
+for shade in ((200, 30, 30), (30, 200, 30), (30, 30, 200)):
+    buf = io.BytesIO()
+    Image.new("RGB", (900, 1200), shade).save(buf, "PNG")
+    photo = media.upload(actor, product, SimpleUploadedFile("p.png", buf.getvalue(), "image/png"))
+    media.process(photo.pk)
+ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+print("SEEDED")
+`;
+  const out = runDjangoScript(script);
+  if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
+  return { title };
+}

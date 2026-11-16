@@ -1,12 +1,11 @@
 import { expect, type Page } from "@playwright/test";
 import type { Seed } from "./seed";
 
-/** Open the seeded product and put one item of the seeded size in the basket. */
+/** Open the seeded product and put one item in the basket (the seeded product is one-size: no size to pick). */
 export async function addToBasket(page: Page, seed: Seed) {
   await page.goto("/ara");
   await page.getByRole("link", { name: new RegExp(seed.title) }).first().click();
-  await page.getByRole("button", { name: seed.size, exact: true }).click();
-  await page.getByRole("button", { name: "Sepete ekle" }).click();
+  await page.getByRole("button", { name: "Sepete ekle", exact: true }).click();
   await expect(page.getByText("Ürün sepete eklendi.")).toBeVisible();
 }
 

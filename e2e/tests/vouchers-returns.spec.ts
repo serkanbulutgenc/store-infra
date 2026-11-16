@@ -28,8 +28,7 @@ test("a Guest buys two items with the voucher", async ({ page }) => {
   for (let i = 0; i < 2; i += 1) {
     await page.goto("/ara");
     await page.getByRole("link", { name: new RegExp(seed.title) }).first().click();
-    await page.getByRole("button", { name: seed.size, exact: true }).click();
-    await page.getByRole("button", { name: "Sepete ekle" }).click();
+    await page.getByRole("button", { name: "Sepete ekle", exact: true }).click();
     await expect(page.getByText("Ürün sepete eklendi.")).toBeVisible();
   }
   await page.goto("/sepet");
