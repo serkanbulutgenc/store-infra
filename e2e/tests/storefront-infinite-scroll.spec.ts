@@ -31,8 +31,9 @@ for i in range(1, ${COUNT} + 1):
 print("SEEDED " + json.dumps({"slug": category.slug}))
 `);
   const match = out.match(/SEEDED (\{.*\})/);
-  if (!match) throw new Error(out);
-  slug = JSON.parse(match[1]).slug;
+  const seeded = match?.[1];
+  if (!seeded) throw new Error(out);
+  slug = JSON.parse(seeded).slug;
 });
 
 // A hydration mismatch (server HTML vs first client render) surfaces as a page error.
