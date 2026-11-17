@@ -108,7 +108,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7.2
+    image: redis:8.10
     restart: unless-stopped
     logging: *logging
     # Broker only: nothing here needs to survive a restart.
