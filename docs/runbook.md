@@ -34,6 +34,8 @@ TODO: `_dmarc` record, starting at `p=none` with a reporting mailbox, tightening
 
 **Publishing.** `store-backend` and `store-frontend` each have a `publish.yml` workflow: every merge to `main` pushes `ghcr.io/<owner>/store-<app>:sha-<commit>`, and pushing a `v*` git tag also pushes that tag. Production never runs `latest`. The frontend workflow is kept in `docs/templates/store-frontend-publish.yml` until it is copied to `store-frontend/.github/workflows/publish.yml`. If the packages are private, run `docker login ghcr.io` once on the server with a read-only token (`read:packages`).
 
+**Branches and releases.** Work lands on `dev` (the default branch of `store-backend` and `store-frontend`) through squash-merged PRs; Dependabot PRs target `dev` too. When `dev` is green, open a PR `dev` into `main` (`gh pr create --base main --head dev`) and merge it with a merge commit; that publishes `sha-<commit>`. To cut a version, run the **Release** workflow in the app's repo (Actions, Release, pick patch/minor/major): it tags `vX.Y.Z` on `main`, creates the GitHub release and publishes that tag's image. Backend and frontend have independent versions, so `scripts/deploy.sh v1.4.0 v0.9.2` is normal. See `docs/adr/0001-dev-branch-and-tag-versioning.md`.
+
 **Deploy** (on the server, as the deploy user, outside trading hours):
 
 ```sh
