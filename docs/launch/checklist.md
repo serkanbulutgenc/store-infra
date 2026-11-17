@@ -76,6 +76,14 @@ Not part of the PRD list above, but each step needs evidence before the release 
 - [ ] Cancel (#1): cancelling an Order releases its Redemption.
 - [ ] Return (#4): a refund equals what the Shopper paid, net of the Voucher share.
 
+**Product Description (issues #9-#11), after release**
+- [ ] Backend first: the Dashboard needs `/api/admin/description-images` and the `description` field, and the Storefront needs the new renderer. Deploy api and web on the same tag.
+- [ ] Write (#11): as Owner and as Staff, open a Product, write a Description in the Açıklama tab with the toolbar, preview it, upload an image and save. A user without `manage_product_photos` sees no image button.
+- [ ] Storefront (#10): the Description shows in the Açıklama tab. Raw HTML, `javascript:` links, external images and strikethrough do not render. Outside links are nofollow. A wide table scrolls inside its own box on a phone.
+- [ ] Limits (#9, #11): 5001 characters is refused with the message in the editor; a text file renamed to `.png` is refused on upload. Uploaded images carry no location data.
+- [ ] Excerpt (#10): quick view and the product's search-result and share text show plain text, with no `**`, `|` or image syntax.
+- [ ] Import (#9): a `description` column sets the Description; a blank cell leaves an existing one alone; two rows of one Product with different descriptions are a row error. See [stock-load.md](stock-load.md).
+
 **Open items these features add to the PRD list**
 - Item 4b (personal-data retention): decide it together with the Reviews and Favorites rules. Both are deleted when an account is deleted (ADR 0004).
 - Item 1a/1b: the privacy notice should mention that a review shows the first name and last initial publicly, and that Favorites are stored. Ask the lawyer before the Reviews release goes public.

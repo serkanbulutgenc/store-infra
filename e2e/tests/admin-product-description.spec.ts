@@ -28,6 +28,7 @@ async function openDescription(page: Page) {
 
 test("the toolbar formats the text, and an uploaded image lands in it", async ({ page }) => {
   await openDescription(page);
+  await expect(page.getByTestId("description-hint")).toContainText("Markdown");
 
   await area(page).fill("ilk satır\niki");
   await area(page).press("Control+a");
@@ -46,6 +47,10 @@ test("the toolbar formats the text, and an uploaded image lands in it", async ({
   });
   await expect(area(page)).toHaveValue(/!\[görsel açıklaması\]\(.*\/media\/description\/.+\.png\)/);
   await expect(page.getByText("1 görselin açıklaması (alt metni) eksik.")).toBeVisible();
+
+  // The warning does not stop the save.
+  await page.getByRole("button", { name: "Kaydet" }).click();
+  await expect(page.getByText("Ürün kaydedildi.")).toBeVisible();
 });
 
 test("the preview shows what the Storefront will, including the uploaded image", async ({
@@ -75,18 +80,28 @@ test("a saved Description shows on the Storefront product page, safely", async (
   await openDescription(page);
   await area(page).fill(
     [
+      "# Büyük",
+      "",
+      "## Orta",
+      "",
       "### Bakım",
       "",
       "**Pamuklu** ve *yumuşak*",
       "",
       "- 30 derecede yıkayın",
       "",
+      "1. Önce ters çevirin",
+      "",
       "| Beden | Göğüs |",
       "| --- | --- |",
       "| M | 96 |",
       "",
+      "[Dış](https://example.com/bakim) [Site](/urun/ornek) [Kötü](javascript:alert(1))",
+      "",
+      "~~eski~~ www.example.org `kod` <b>ham</b>",
+      "",
       "<script>window.__xss = 1</script>",
-      "![dış](https://evil.example/x.png)",
+      "![dış](https://evil.example/x.png) ![düz](http://evil.example/y.png)",
     ].join("\n"),
   );
   await page.getByRole("button", { name: "Kaydet" }).click();
@@ -95,11 +110,22 @@ test("a saved Description shows on the Storefront product page, safely", async (
   await page.goto(`/urun/${product.slug}`);
   await page.getByRole("tab", { name: "Açıklama" }).click();
   const panel = page.getByRole("tabpanel", { name: "Açıklama" });
-  await expect(panel.getByRole("heading", { name: "Bakım", level: 3 })).toBeVisible();
+  // # and ## become h3; the page keeps h1 and h2.
+  await expect(panel.getByRole("heading", { level: 3 })).toHaveText(["Büyük", "Orta", "Bakım"]);
+  await expect(panel.locator("h1, h2")).toHaveCount(0);
   await expect(panel.locator("strong")).toHaveText("Pamuklu");
-  await expect(panel.getByRole("listitem")).toHaveText("30 derecede yıkayın");
+  await expect(panel.locator("em")).toHaveText("yumuşak");
+  await expect(panel.getByRole("listitem")).toHaveText(["30 derecede yıkayın", "Önce ters çevirin"]);
   await expect(panel.getByRole("cell", { name: "96" })).toBeVisible();
-  await expect(panel.locator("script")).toHaveCount(0);
+
+  // Links: outside ones are nofollow, our own pages are not, javascript: is not a link at all.
+  await expect(panel.getByRole("link", { name: "Dış" })).toHaveAttribute("rel", /nofollow/);
+  await expect(panel.getByRole("link", { name: "Site" })).not.toHaveAttribute("rel", /.+/);
+  await expect(panel.locator('a[href^="javascript"]')).toHaveCount(0);
+
+  // Only tables of GFM; other elements and raw HTML do not render as such.
+  await expect(panel.locator("del, code, b, script")).toHaveCount(0);
+  await expect(panel.locator('a[href*="example.org"]')).toHaveCount(0);
   await expect(panel.locator('img[src*="evil.example"]')).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
 });
