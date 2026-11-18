@@ -2,6 +2,8 @@ import { runDjangoScript } from "./stack";
 
 export interface Seed {
   title: string;
+  /** The Category the product sits in (one per run, so a Campaign on it touches only this product). */
+  category: string;
   size: string;
   staffEmail: string;
   staffPassword: string;
@@ -22,6 +24,7 @@ export function seedShop(): Seed {
   const run = Date.now().toString(36);
   const seed: Seed = {
     title: `E2E Elbise ${run}`,
+    category: `E2E ${run}`,
     size: "M",
     staffEmail: `e2e-staff-${run}@example.com`,
     staffPassword: `E2e-${run}-Pass!9x`,
@@ -36,7 +39,7 @@ from store_backend.services import catalog, shop_settings
 from store_backend.users.models import User
 
 colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Siyah ${run}`)}, "#000000")
-category = catalog.create_category("E2E ${run}")
+category = catalog.create_category(${JSON.stringify(seed.category)})
 product = catalog.create_product(
     title=${JSON.stringify(seed.title)},
     product_class=ProductClass.objects.get(name="Giyim"),
