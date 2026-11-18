@@ -165,6 +165,57 @@ test.describe("banner", () => {
   });
 });
 
+/** The slider's Collection ("ana-sayfa"), with the Products in the given order and status. A slug
+ * is unique, so any earlier one goes first; every test removes it again. */
+function setSliderCollection(status: "published" | "draft" | null, titles: string[] = []) {
+  const out = runDjangoScript(`
+from django.utils import timezone
+from oscar.apps.catalogue.models import Product
+from store_backend.catalog.models import Collection, CollectionProduct
+
+Collection.objects.filter(slug="ana-sayfa").delete()
+status = ${JSON.stringify(status ?? "")}
+if status:
+    c = Collection.objects.create(
+        name="Ana Sayfa", slug="ana-sayfa", status=status,
+        published_at=timezone.now() if status == "published" else None,
+    )
+    for i, t in enumerate(${JSON.stringify(titles)}):
+        CollectionProduct.objects.create(collection=c, product=Product.objects.get(title=t), position=i)
+print("COLLECTION SET")
+`);
+  if (!out.includes("COLLECTION SET")) throw new Error(out);
+}
+
+test.describe("slider Collection", () => {
+  test.afterAll(() => setSliderCollection(null));
+  const thumbs = (page: Page) => hero(page).getByRole("button", { name: /^Ana Sayfa / });
+
+  test("a published Collection named ana-sayfa feeds the slider, in its order", async ({
+    page,
+  }) => {
+    // The oldest Product first, then the newest: nothing like the newest-first default.
+    setSliderCollection("published", [title(0), title(COUNT - 1)]);
+    await page.goto("/");
+    await expect(thumbs(page)).toHaveCount(2);
+    await expect(thumbs(page).first()).toContainText(title(0));
+    await expect(thumbs(page).nth(1)).toContainText(title(COUNT - 1));
+  });
+
+  test("an unpublished Collection leaves the slider on the newest Products", async ({ page }) => {
+    setSliderCollection("draft", [title(0)]);
+    await page.goto("/");
+    await expect(thumbs(page).first()).toContainText(saleTitle);
+    expect(await thumbs(page).count()).toBeGreaterThan(2);
+  });
+
+  test("an empty published Collection does too", async ({ page }) => {
+    setSliderCollection("published", []);
+    await page.goto("/");
+    await expect(thumbs(page).first()).toContainText(saleTitle);
+  });
+});
+
 test.describe("phone", () => {
   test.use({ viewport: { width: 390, height: 800 } });
 
