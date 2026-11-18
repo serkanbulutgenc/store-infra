@@ -130,10 +130,22 @@ test.describe("Owner keyboard", () => {
   test("an item can be picked up and dropped from the keyboard", async ({ page }) => {
     await page.goto("/admin/menus");
     await expect(page.getByText(n.c1, { exact: true })).toBeVisible();
-    await handle(page, n.c).focus();
+    // dnd-kit says what it is doing in a live region. The page paints before it hydrates and
+    // a key pressed before that does nothing, so wait for each step instead of firing blindly.
+    // The Footer editor is mounted too (hidden); the Header's region comes first.
+    const live = page.locator('[id^="DndLiveRegion"]').first();
+    await expect(async () => {
+      await handle(page, n.c).focus();
+      await page.keyboard.press("Space");
+      await expect(live).toContainText(/tutuldu|taşınacak/, { timeout: 1500 });
+    }).toPass();
+    for (let i = 0; i < 6; i++) {
+      const before = await live.textContent();
+      await page.keyboard.press("ArrowUp");
+      await expect.poll(() => live.textContent()).not.toBe(before);
+    }
     await page.keyboard.press("Space");
-    for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowUp");
-    await page.keyboard.press("Space");
+    await expect(live).toContainText("bırakıldı");
     // Wherever it landed, it moved, and its child went with it.
     await expect.poll(async () => (await order(page)).indexOf(n.c)).toBeLessThan(3);
     const after = await order(page);
