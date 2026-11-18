@@ -3,8 +3,8 @@ import { loginState } from "../support/auth";
 import { seedStaff } from "../support/seed";
 import { runDjangoScript } from "../support/stack";
 
-// Store-infra #21: the Owner's pending-approval list, and the count badge on the Koleksiyonlar item
-// of the Dashboard nav.
+// Store-infra #21: the count of Collections waiting for the Owner, as a badge on the Koleksiyonlar
+// item of the Dashboard nav. The Owner finds them with the list's status filter.
 // The Owner is a Staff user holding the Owner's Collection permissions, since a real Owner
 // needs TOTP.
 const run = Date.now().toString(36);
@@ -37,7 +37,7 @@ print("SEEDED")
   ownerState = await loginState(browser, baseURL, seedStaff(OWNER));
 });
 
-test("a submission shows in the Owner's pending list and nav badge until it is approved", async ({
+test("a submission counts on the Koleksiyonlar badge until it is approved", async ({
   browser,
   baseURL,
 }) => {
@@ -55,12 +55,10 @@ test("a submission shows in the Owner's pending list and nav badge until it is a
   await sp.getByRole("button", { name: "Onaya gönder" }).click();
   await expect(sp.getByText("Onay bekliyor").first()).toBeVisible();
 
-  // Staff see the Koleksiyonlar item but no number on it, and not the Owner's screen.
+  // Staff see the Koleksiyonlar item but no number on it.
   await sp.goto("/admin");
   await expect(sp.getByRole("link", { name: /Koleksiyonlar/ })).toBeVisible();
   await expect(sp.getByRole("link", { name: /Koleksiyonlar/ }).getByRole("status")).toHaveCount(0);
-  await sp.goto("/admin/collections/pending");
-  await expect(sp).toHaveURL(/\/admin\/?$/);
   await staff.close();
 
   const owner = await browser.newContext({ baseURL, storageState: ownerState, locale: "tr-TR" });
@@ -70,14 +68,14 @@ test("a submission shows in the Owner's pending list and nav badge until it is a
   await expect(entry.getByRole("status")).toBeVisible();
   const before = Number((await entry.getByRole("status").textContent())?.trim());
 
-  await op.goto("/admin/collections/pending");
+  await op.goto("/admin/collections?status=pending_approval");
   const row = op.getByRole("row", { name: new RegExp(n.name) });
-  await expect(row).toContainText("Yeni gönderim");
-  await row.getByRole("link", { name: `${n.name} incele` }).click();
+  await expect(row).toContainText("Onay bekliyor");
+  await row.getByRole("link", { name: n.name, exact: true }).click();
   await op.getByRole("button", { name: "Onayla" }).click();
   await expect(op.getByText("Onaylandı.").first()).toBeVisible();
 
-  await op.goto("/admin/collections/pending");
+  await op.goto("/admin/collections?status=pending_approval");
   await expect(op.getByRole("row", { name: new RegExp(n.name) })).toHaveCount(0);
   // Other specs may leave submissions behind, so compare the count to what it was.
   const after = op.getByRole("link", { name: /Koleksiyonlar/ }).getByRole("status");
