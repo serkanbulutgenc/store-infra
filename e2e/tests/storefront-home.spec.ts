@@ -114,6 +114,57 @@ test("see all on the on-sale rail opens the search filtered to sale items", asyn
   await expect(page.getByRole("link", { name: new RegExp(title(0)) })).toHaveCount(0);
 });
 
+/** The banner is a Store setting; it changes the shop-wide row, so every test puts it back. */
+function setBanner(image: string, link: string, alt: string) {
+  const out = runDjangoScript(`
+from store_backend.shop.models import StoreSettings
+StoreSettings.objects.update(
+    banner_image_url=${JSON.stringify(image)},
+    banner_link=${JSON.stringify(link)},
+    banner_alt=${JSON.stringify(alt)},
+)
+print("BANNER SET")
+`);
+  if (!out.includes("BANNER SET")) throw new Error(out);
+}
+
+test.describe("banner", () => {
+  test.afterAll(() => setBanner("", "", ""));
+
+  test("a banner set in the Store settings shows above the slider and links on", async ({
+    page,
+  }) => {
+    setBanner("/e2e-banner.png", "/sepet", `Sonbahar ${run}`);
+    await page.goto("/");
+    const banner = page.getByRole("region", { name: "Duyuru" });
+    await expect(banner.getByRole("img", { name: `Sonbahar ${run}` })).toHaveAttribute(
+      "src",
+      "/e2e-banner.png",
+    );
+    // Above the slider.
+    const [b, h] = await Promise.all([banner.boundingBox(), hero(page).boundingBox()]);
+    expect((b?.y ?? 1e9) < (h?.y ?? 0)).toBe(true);
+    await banner.getByRole("link").click();
+    await expect(page).toHaveURL(/\/sepet$/);
+  });
+
+  test("an external link opens in a new tab", async ({ page }) => {
+    setBanner("/e2e-banner.png", "https://example.com/kampanya", `Dış ${run}`);
+    await page.goto("/");
+    const link = page.getByRole("region", { name: "Duyuru" }).getByRole("link");
+    await expect(link).toHaveAttribute("href", "https://example.com/kampanya");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", /noopener/);
+  });
+
+  test("without a banner image nothing is drawn", async ({ page }) => {
+    setBanner("", "/sepet", "unused");
+    await page.goto("/");
+    await expect(page.getByRole("region", { name: "Duyuru" })).toHaveCount(0);
+    await expect(hero(page).getByText(saleTitle).first()).toBeVisible();
+  });
+});
+
 test.describe("phone", () => {
   test.use({ viewport: { width: 390, height: 800 } });
 
