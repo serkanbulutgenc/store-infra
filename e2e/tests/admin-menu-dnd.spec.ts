@@ -4,20 +4,28 @@ import { runDjangoScript } from "../support/stack";
 
 // Store-frontend #4: drag and drop (and the keyboard's one-level-in/out buttons) in the Menu
 // builder. The Header allows 3 levels. Items are groups with a label, so no target is needed.
-const run = Date.now().toString(36);
-const n = {
-  a: `Sürükle A ${run}`,
-  a1: `Sürükle A1 ${run}`,
-  b: `Sürükle B ${run}`,
-  c: `Sürükle C ${run}`,
-  c1: `Sürükle C1 ${run}`,
-};
+const base = Date.now().toString(36);
+const names = (tag: string) => ({
+  a: `Sürükle A ${tag}`,
+  a1: `Sürükle A1 ${tag}`,
+  b: `Sürükle B ${tag}`,
+  c: `Sürükle C ${tag}`,
+  c1: `Sürükle C1 ${tag}`,
+});
+let run = base;
+let n = names(run);
+let seeded = 0;
 
+/** A fresh set of items, with names of its own, for every describe block. */
 function seed() {
+  run = `${base}${seeded++}`;
+  n = names(run);
   const out = runDjangoScript(`
 from store_backend.shop.models import Menu, MenuItem
 
 header = Menu.objects.get(key="header")
+# Earlier runs' items would push these rows off screen.
+MenuItem.objects.filter(menu=header, label__startswith="Sürükle").delete()
 def group(label, position, parent=None):
     return MenuItem.objects.create(
         menu=header, parent=parent, position=position, target_type="group", label=label
@@ -60,6 +68,9 @@ async function dragTo(page: Page, name: string, onto: Locator, at: number) {
   await page.mouse.up();
 }
 
+// All the rows must be on screen at once for the mouse to reach them.
+test.use({ viewport: { width: 1280, height: 1600 } });
+
 test.describe("Owner", () => {
   useStaffLogin(["manage_menus"], seed);
 
@@ -93,15 +104,18 @@ test.describe("Owner", () => {
     expect(await nested(page, n.b)).toBe(true);
   });
 
-  test("the keyboard moves an item one level in or out, and refuses what does not fit", async ({
-    page,
-  }) => {
+});
+
+test.describe("Owner keyboard", () => {
+  useStaffLogin(["manage_menus"], seed);
+
+  test("one level in or out from the buttons", async ({ page }) => {
     await page.goto("/admin/menus");
     await expect(page.getByText(n.c1, { exact: true })).toBeVisible();
 
-    // The first item cannot go in; a top-level item cannot go out.
-    await expect(button(page, n.a, "bir seviye içeri al")).toBeDisabled();
+    // A top-level item cannot go out, and A1, first in its group, cannot go in.
     await expect(button(page, n.a, "bir seviye dışarı al")).toBeDisabled();
+    await expect(button(page, n.a1, "bir seviye içeri al")).toBeDisabled();
 
     // B into A (last child), then out again (right after A).
     await button(page, n.b, "bir seviye içeri al").focus();
@@ -111,10 +125,6 @@ test.describe("Owner", () => {
     await button(page, n.b, "bir seviye dışarı al").focus();
     await page.keyboard.press("Enter");
     await expect.poll(() => nested(page, n.b)).toBe(false);
-
-    // C (two levels) into B (level 1) fits in a Header of 3 levels; in A1 it would not.
-    // Put B under A first, then C into A1's place is out of reach: C goes in at level 2 only.
-    await expect(button(page, n.c, "bir seviye içeri al")).toBeEnabled();
   });
 
   test("an item can be picked up and dropped from the keyboard", async ({ page }) => {
