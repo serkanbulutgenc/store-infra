@@ -19,7 +19,11 @@ useStaffLogin(["manage_campaigns"], () => {
   voucher = seedVoucher({ suffix: "C" }); // 10% off
 });
 
-/** A Shopper's own browser: the Dashboard login of `page` must not be on the basket. */
+/**
+ * A Shopper's own browser, with no Dashboard login. A Dashboard user is never a Shopper (see
+ * "Shopper" in store-backend's GLOSSARY.md): signed in as Staff, adding to the basket does
+ * nothing, so the shopping steps cannot use the logged-in `page`.
+ */
 async function shopper(browser: Browser, baseURL: string | undefined) {
   const context = await browser.newContext({ baseURL, locale: "tr-TR" });
   return { page: await context.newPage(), close: () => context.close() };
