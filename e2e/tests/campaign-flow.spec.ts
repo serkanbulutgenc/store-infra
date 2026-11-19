@@ -42,8 +42,14 @@ test("the Owner creates and activates a Campaign on a Category", async ({ page }
   await page.getByRole("button", { name: "Yeni kampanya" }).click();
   await page.getByLabel("Kampanya adı").fill(campaign);
   await page.getByLabel("İndirim yüzdesi").fill("20");
-  await page.getByLabel(/^Kategoriler/).fill(seed.category);
-  await page.getByRole("button", { name: `${seed.category} ekle` }).click();
+  // The Category field is an autocomplete: nothing is listed under it until it is used.
+  const categories = page.getByLabel(/^Kategoriler/);
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await categories.fill(seed.category);
+  await expect(page.getByRole("option", { name: seed.category })).toBeVisible();
+  await categories.press("Enter"); // picks the highlighted suggestion
+  await expect(page.getByRole("button", { name: `${seed.category} çıkar` })).toBeVisible();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
   await page.getByRole("button", { name: "Kaydet" }).click();
 
   const row = page.getByRole("row", { name: new RegExp(campaign) });
