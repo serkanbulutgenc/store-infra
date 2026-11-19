@@ -89,9 +89,13 @@ test("checkout charges the Campaign price, and the Order screen shows the Campai
   await page.getByRole("link", { name: number }).click();
   await expect(page.getByText(`Kampanya: ${campaign}`)).toBeVisible();
   await expect(page.getByText(`(₺80,00)`).first()).toBeVisible(); // the frozen Campaign price
-  // The Owner's Campaign name leads to the Campaign screen.
+  // The Owner's Campaign name opens that Campaign for editing on the Campaign screen.
   await page.getByRole("link", { name: campaign }).click();
-  await expect(page).toHaveURL(/\/admin\/campaigns/);
+  await expect(page).toHaveURL(/\/admin\/campaigns\?edit=\d+/);
+  await expect(page.getByRole("dialog", { name: "Kampanyayı düzenle" })).toBeVisible();
+  await expect(page.getByLabel("Kampanya adı")).toHaveValue(campaign);
+  await page.getByRole("button", { name: "Vazgeç" }).click();
+  await expect(page).not.toHaveURL(/edit=/); // closing takes the param off the address
 });
 
 test("a Voucher comes off the Campaign price", async ({ page, browser, baseURL }) => {
