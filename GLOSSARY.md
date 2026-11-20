@@ -34,3 +34,27 @@ _Avoid_: Details, body
 
 **Thumbnail**:
 A small Photo shown beside the main Photo so the customer can switch which one is large. Shown only when the selected Colour has more than one Photo.
+
+**Stock alert**:
+A Shopper's request, for one sold-out Variant, to be emailed once when it is back in stock. Needs the Shopper's specific consent and a confirmed email address; it ends after the email is sent, is rejected, or lapses after 90 days.
+_Avoid_: waitlist, notify me, subscription
+
+**Size guide**:
+The formatted measuring reference a Shopper opens from the size picker. Written once per Product class, with an optional override on a single Product. Shown in a dialog; hidden for a One-size Product or when no guide applies.
+_Avoid_: size chart, sizing
+
+**Fit note**:
+An optional one-line comment on how a Product runs (for example "runs small, size up"), shown under the size picker. Plain text, per Product.
+_Avoid_: fit tip
+
+**Similar products**:
+The ranked list of other Products shown on a Product's page (label "Benzer ürünler"). Ranked by same leaf Category, then Brand, shared attributes and close price; only published, in-stock Products appear.
+_Avoid_: related products
+
+**Recently viewed**:
+The list of up to 12 Products a Shopper last opened, kept only in their own browser and cleared on sign-out (label "Son baktıklarınız"). It is never sent to the server as a log.
+_Avoid_: history
+
+**Report**:
+A read-only, Owner-only summary of orders, returns, Campaigns and Vouchers (label "Raporlar"). It never uses visitor tracking.
+_Avoid_: analytics, statistics
