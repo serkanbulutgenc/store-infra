@@ -360,3 +360,107 @@ print("SEEDED " + json.dumps(out))
   if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${result}`);
   return { ...(JSON.parse(match[1]) as Omit<SizeGuideSeed, "className">), className };
 }
+
+export interface SimilarSeed {
+  /** The Product whose page is opened. */
+  current: { slug: string; title: string };
+  /** Same Category and same Brand as `current`: it must rank first. */
+  sameBrand: { slug: string; title: string };
+  /** Two more published, in-stock Products of the Category, of other or no Brand. */
+  others: { slug: string; title: string }[];
+  soldOut: { slug: string; title: string };
+  draft: { slug: string; title: string };
+  /** Alone in a Category of its own: nothing is similar to it. */
+  lonely: { slug: string; title: string };
+}
+
+/**
+ * One Category for the Similar products rail: the current Product, a Product of its Brand, two
+ * others, a sold-out one and a draft one, plus a Product alone in another Category. Leaves shop
+ * settings alone. The Category has no parent, so the rail never widens into other specs' Products.
+ */
+export function seedSimilarShop(): SimilarSeed {
+  const run = Date.now().toString(36);
+  const title = (name: string) => `E2E ${name} ${run}`;
+  const script = `
+import json
+from oscar.apps.catalogue.models import ProductClass
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog
+
+ours = catalog.create_brand(${JSON.stringify(`E2E Marka ${run}`)})
+theirs = catalog.create_brand(${JSON.stringify(`E2E Başka ${run}`)})
+colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Gri ${run}`)}, "#808080")
+category = catalog.create_category(${JSON.stringify(`E2E Benzer ${run}`)})
+alone = catalog.create_category(${JSON.stringify(`E2E Yalnız ${run}`)})
+giyim = ProductClass.objects.get(name="Giyim")
+
+def make(title, *, brand=None, stock=10, status=ProductStatus.PUBLISHED, cat=category):
+    product = catalog.create_product(title=title, product_class=giyim, category=cat, shelf_price="100.00", brand=brand)
+    catalog.create_variant(product, colour=colour, size="M", stock=stock)
+    ProductProfile.objects.filter(product=product).update(status=status)
+    return {"slug": product.slug, "title": title}
+
+out = {
+    "current": make(${JSON.stringify(title("Mevcut"))}, brand=ours),
+    "others": [
+        make(${JSON.stringify(title("Başka marka"))}, brand=theirs),
+        make(${JSON.stringify(title("Markasız"))}),
+    ],
+    "sameBrand": make(${JSON.stringify(title("Aynı marka"))}, brand=ours),
+    "soldOut": make(${JSON.stringify(title("Tükenmiş"))}, brand=ours, stock=0),
+    "draft": make(${JSON.stringify(title("Taslak"))}, brand=ours, status=ProductStatus.DRAFT),
+    "lonely": make(${JSON.stringify(title("Yalnız"))}, cat=alone),
+}
+print("SEEDED " + json.dumps(out))
+`;
+  const result = runDjangoScript(script);
+  const match = result.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${result}`);
+  return JSON.parse(match[1]) as SimilarSeed;
+}
+
+export interface ViewedSeed {
+  /** Four published, in-stock Products, `a` to `d`. */
+  products: { slug: string; title: string }[];
+}
+
+/** Four published Products for the Recently viewed rail. Leaves shop settings alone. */
+export function seedViewedShop(): ViewedSeed {
+  const run = Date.now().toString(36);
+  const script = `
+import json
+from oscar.apps.catalogue.models import ProductClass
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog
+
+colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Lacivert ${run}`)}, "#000080")
+category = catalog.create_category(${JSON.stringify(`E2E Son baktı ${run}`)})
+giyim = ProductClass.objects.get(name="Giyim")
+out = []
+for name in ["Alfa", "Beta", "Gama", "Delta"]:
+    title = f"E2E {name} ${run}"
+    product = catalog.create_product(title=title, product_class=giyim, category=category, shelf_price="100.00")
+    catalog.create_variant(product, colour=colour, size="M", stock=10)
+    ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+    out.append({"slug": product.slug, "title": title})
+print("SEEDED " + json.dumps({"products": out}))
+`;
+  const result = runDjangoScript(script);
+  const match = result.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${result}`);
+  return JSON.parse(match[1]) as ViewedSeed;
+}
+
+/** Sell out a Product: every Variant's stock goes to zero (a sold-out Product drops out of the rails). */
+export function sellOut(slug: string): void {
+  const out = runDjangoScript(`
+from oscar.apps.partner.models import StockRecord
+from store_backend.catalog.models import ProductProfile
+
+profile = ProductProfile.objects.get(slug=${JSON.stringify(slug)})
+StockRecord.objects.filter(product__parent_id=profile.product_id).update(num_in_stock=0)
+print("SOLDOUT")
+`);
+  if (!out.includes("SOLDOUT")) throw new Error(`could not sell out ${slug}:\n${out}`);
+}
