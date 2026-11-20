@@ -333,7 +333,7 @@ from store_backend.services import catalog, product_classes
 from store_backend.users.models import User
 
 actor = User(email="e2e-guide-${run}@example.com", is_staff=True)
-actor.set_password("E2e-${run}-Pass!9x")
+actor.set_unusable_password()  # only the audit actor for creating the classes; never logs in
 actor.save()
 
 lettered = product_classes.create(actor, name=${JSON.stringify(className)}, size_scheme="letters", default_kdv_rate="20")
