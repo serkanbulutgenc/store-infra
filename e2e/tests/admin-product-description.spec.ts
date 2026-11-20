@@ -18,6 +18,10 @@ const PNG = Buffer.from(
   "base64",
 );
 
+// The Beden tablosu tab holds a Description editor too (forced mounted), so test ids and labels
+// are looked up inside the Açıklama panel only.
+const panel = (page: Page) => page.getByRole("tabpanel", { name: "Açıklama" });
+
 const area = (page: Page) => page.getByRole("textbox", { name: "Açıklama" });
 
 async function openDescription(page: Page) {
@@ -28,7 +32,7 @@ async function openDescription(page: Page) {
 
 test("the toolbar formats the text, and an uploaded image lands in it", async ({ page }) => {
   await openDescription(page);
-  await expect(page.getByTestId("description-hint")).toContainText("Markdown");
+  await expect(panel(page).getByTestId("description-hint")).toContainText("Markdown");
 
   await area(page).fill("ilk satır\niki");
   await area(page).press("Control+a");
@@ -40,7 +44,7 @@ test("the toolbar formats the text, and an uploaded image lands in it", async ({
   await page.getByRole("button", { name: /^Kalın/ }).click();
   await expect(area(page)).toHaveValue("- ilk satır\n- iki**kalın metin**");
 
-  await page.getByLabel("Görsel dosyası seç").setInputFiles({
+  await panel(page).getByLabel("Görsel dosyası seç").setInputFiles({
     name: "kumas.png",
     mimeType: "image/png",
     buffer: PNG,
@@ -58,7 +62,7 @@ test("the preview shows what the Storefront will, including the uploaded image",
 }) => {
   await openDescription(page);
   await area(page).fill("**Pamuklu** kumaş\n\n![Kumaş](/media/description/yok.png)");
-  await page.getByLabel("Görsel dosyası seç").setInputFiles({
+  await panel(page).getByLabel("Görsel dosyası seç").setInputFiles({
     name: "kumas.png",
     mimeType: "image/png",
     buffer: PNG,
@@ -66,7 +70,7 @@ test("the preview shows what the Storefront will, including the uploaded image",
   await expect(area(page)).toHaveValue(/\/media\/description\/.+\.png/);
 
   await page.getByRole("button", { name: "Önizleme" }).click();
-  const preview = page.getByTestId("description-preview");
+  const preview = panel(page).getByTestId("description-preview");
   await expect(preview.locator("strong")).toHaveText("Pamuklu");
   // The uploaded file is served: the browser could decode it.
   const uploaded = preview.locator('img[src*="/media/description/"]').last();
@@ -150,7 +154,7 @@ test("a file that is not an image is refused and the text is left alone", async 
   await openDescription(page);
   await area(page).fill("değişmez");
 
-  await page.getByLabel("Görsel dosyası seç").setInputFiles({
+  await panel(page).getByLabel("Görsel dosyası seç").setInputFiles({
     name: "not.txt",
     mimeType: "text/plain",
     buffer: Buffer.from("merhaba"),
