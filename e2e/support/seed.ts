@@ -299,3 +299,64 @@ print("SEEDED " + json.dumps({"id": product.id, "slug": product.slug}))
   const { id, slug } = JSON.parse(match[1]) as { id: number; slug: string };
   return { id, title, slug };
 }
+
+export interface SizeGuideSeed {
+  /** Class guide is written in the test; this product has no override. */
+  plain: { id: number; slug: string; title: string };
+  /** The same class, for a Product override. */
+  overridden: { id: number; slug: string; title: string };
+  /** Sits in a One-size class. */
+  oneSize: { id: number; slug: string; title: string };
+  /** Id of the letters class the first two Products belong to. */
+  classId: number;
+  className: string;
+}
+
+/**
+ * Three published Products for the Size guide specs, in Product classes of their own: editing the
+ * shared "Giyim" class guide would put a "Beden tablosu" link on every other spec's product.
+ * Two Products share a letters class (so a class guide reaches both and one can override it); the
+ * third is in a One-size class. Leaves shop settings alone.
+ */
+export function seedSizeGuideShop(): SizeGuideSeed {
+  const run = Date.now().toString(36);
+  const className = `E2E Bedenli ${run}`;
+  const titles = {
+    plain: `E2E Tablolu ${run}`,
+    overridden: `E2E Özel Tablolu ${run}`,
+    oneSize: `E2E Tek Ebatlı ${run}`,
+  };
+  const script = `
+import json
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog, product_classes
+from store_backend.users.models import User
+
+actor = User(email="e2e-guide-${run}@example.com", is_staff=True)
+actor.set_password("E2e-${run}-Pass!9x")
+actor.save()
+
+lettered = product_classes.create(actor, name=${JSON.stringify(className)}, size_scheme="letters", default_kdv_rate="20")
+single = product_classes.create(actor, name=${JSON.stringify(`E2E Tek Ebat ${run}`)}, size_scheme="one_size", default_kdv_rate="20")
+colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Bordo ${run}`)}, "#800020")
+category = catalog.create_category("E2E Tablo ${run}")
+
+def publish(title, product_class, size):
+    product = catalog.create_product(title=title, product_class=product_class, category=category, shelf_price="100.00")
+    catalog.create_variant(product, colour=colour, size=size, stock=10)
+    ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+    return {"id": product.id, "slug": product.slug, "title": title}
+
+out = {
+    "plain": publish(${JSON.stringify(titles.plain)}, lettered, "M"),
+    "overridden": publish(${JSON.stringify(titles.overridden)}, lettered, "M"),
+    "oneSize": publish(${JSON.stringify(titles.oneSize)}, single, "Tek Ebat"),
+    "classId": lettered.id,
+}
+print("SEEDED " + json.dumps(out))
+`;
+  const result = runDjangoScript(script);
+  const match = result.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${result}`);
+  return { ...(JSON.parse(match[1]) as Omit<SizeGuideSeed, "className">), className };
+}
