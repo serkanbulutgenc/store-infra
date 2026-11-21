@@ -464,3 +464,69 @@ print("SOLDOUT")
 `);
   if (!out.includes("SOLDOUT")) throw new Error(`could not sell out ${slug}:\n${out}`);
 }
+
+export interface StockAlertSeed {
+  id: number;
+  slug: string;
+  title: string;
+  /** The sold-out Variant (size M); size L has stock, so the Product is still listed. */
+  soldOutVariantId: number;
+}
+
+/** One published Product with a sold-out Size (M) and one in stock (L). Leaves shop settings alone. */
+export function seedStockAlertShop(): StockAlertSeed {
+  const run = Date.now().toString(36);
+  const title = `E2E Bildirimli ${run}`;
+  const script = `
+import json
+from oscar.apps.catalogue.models import ProductClass
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog
+
+colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Haki ${run}`)}, "#8a7f4a")
+category = catalog.create_category("E2E Bildirim ${run}")
+product = catalog.create_product(
+    title=${JSON.stringify(title)},
+    product_class=ProductClass.objects.get(name="Giyim"),
+    category=category,
+    shelf_price="100.00",
+)
+sold_out = catalog.create_variant(product, colour=colour, size="M", stock=0)
+catalog.create_variant(product, colour=colour, size="L", stock=5)
+ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+print("SEEDED " + json.dumps({"id": product.id, "slug": product.slug, "variant": sold_out.id}))
+`;
+  const out = runDjangoScript(script);
+  const match = out.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
+  const data = JSON.parse(match[1]) as { id: number; slug: string; variant: number };
+  return { id: data.id, slug: data.slug, title, soldOutVariantId: data.variant };
+}
+
+/** Switch the Store setting for Stock alerts on or off directly (the Dashboard switch is tested separately). */
+export function setStockAlerts(enabled: boolean): void {
+  const out = runDjangoScript(`
+from store_backend.services import shop_settings
+
+row = shop_settings.get()
+row.stock_alerts_enabled = ${enabled ? "True" : "False"}
+row.save()
+print("SET")
+`);
+  if (!out.includes("SET")) throw new Error(`could not set stock_alerts_enabled:\n${out}`);
+}
+
+/**
+ * The reject link an alert email carries, as a path. The link is a signed value that needs no
+ * live row, so this stands in for the link in an earlier alert email.
+ */
+export function rejectPath(email: string, variantId: number): string {
+  const out = runDjangoScript(`
+from store_backend.services import stock_alerts
+
+print("PATH /stok-bildirimi/vazgec?token=" + stock_alerts.reject_token(${JSON.stringify(email)}, ${variantId}))
+`);
+  const match = out.match(/PATH (\S+)/);
+  if (!match?.[1]) throw new Error(`could not build a reject link:\n${out}`);
+  return match[1];
+}
