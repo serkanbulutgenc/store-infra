@@ -807,3 +807,49 @@ print("DESCRIPTION " + json.dumps(Product.objects.get(title=${JSON.stringify(tit
   if (!match?.[1]) throw new Error(`could not read the description:\n${out}`);
   return JSON.parse(match[1]) as string;
 }
+
+/** A real Owner (the dev stack has OWNER_MFA_REQUIRED=False, so no TOTP step). Leaves the catalogue alone. */
+export function seedOwner(): { email: string; password: string } {
+  const run = Date.now().toString(36);
+  const email = `e2e-owner-${run}@example.com`;
+  const password = `${randomBytes(12).toString("hex")}-Aa1!`;
+  const out = runDjangoScript(`
+from allauth.account.models import EmailAddress
+from django.contrib.auth.models import Group
+from store_backend.users.models import User
+
+owner = User(email=${JSON.stringify(email)}, is_staff=True)
+owner.set_password(${JSON.stringify(password)})
+owner.save()
+owner.groups.add(Group.objects.get(name="Owner"))
+EmailAddress.objects.create(user=owner, email=owner.email, verified=True, primary=True)
+print("SEEDED")
+`);
+  if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs):\n${out}`);
+  return { email, password };
+}
+
+/**
+ * A Dashboard user in no group, holding only `permissions` (granted directly). The Staff group
+ * includes `manage_product_photos`, so a user without it has to be built this way.
+ */
+export function seedUserWith(permissions: string[]): { email: string; password: string } {
+  const run = Date.now().toString(36);
+  const email = `e2e-limited-${run}@example.com`;
+  const password = `${randomBytes(12).toString("hex")}-Aa1!`;
+  const out = runDjangoScript(`
+from allauth.account.models import EmailAddress
+from django.contrib.auth.models import Permission
+from store_backend.users.models import User
+
+user = User(email=${JSON.stringify(email)}, is_staff=True)
+user.set_password(${JSON.stringify(password)})
+user.save()
+for codename in ${JSON.stringify(permissions)}:
+    user.user_permissions.add(Permission.objects.get(codename=codename))
+EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+print("SEEDED")
+`);
+  if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs):\n${out}`);
+  return { email, password };
+}
