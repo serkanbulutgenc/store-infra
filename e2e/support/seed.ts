@@ -530,3 +530,174 @@ print("PATH /stok-bildirimi/vazgec?token=" + stock_alerts.reject_token(${JSON.st
   if (!match?.[1]) throw new Error(`could not build a reject link:\n${out}`);
   return match[1];
 }
+
+export interface ReportsSeed {
+  /** A 7-day window in the past, `YYYY-MM-DD`, that no other order falls in. */
+  from: string;
+  to: string;
+  owner: { email: string; password: string };
+  /** 100.00 shelf price, and 200.00. */
+  cheap: string;
+  dear: string;
+  voucher: string;
+  /**
+   * The shipping and cash-on-delivery fees the four sold orders were charged, read from the fee rows saved with each
+   * order at placement, not from the report. Shipping follows the shop's rate table (by quantity), not one flat fee.
+   */
+  fees: { shipping: string; cod: string };
+}
+
+/**
+ * Reports (GLOSSARY: Owner). A known set of orders for an Owner to read figures from, backdated into a 7-day window of
+ * its own in the past (2000 to 2019) so the other specs' orders, placed today, and earlier runs of this spec fall
+ * outside it. The window is picked at random and the script refuses one that already holds an order; a few tries
+ * find a free one.
+ *
+ * Two products, 100.00 and 200.00, with cash on delivery at 15.00 (shipping comes from the rate table). Window days:
+ *   1  COD,      cheap x2                          200.00  a sale
+ *   2  transfer, dear x1, paid                     200.00  a sale (the unpaid kind would be "pending")
+ *   2  COD,      cheap x1, cancelled                       not a sale
+ *   3  COD,      cheap x2, 10% Voucher             180.00  a sale, 20.00 off
+ *   4  COD,      dear x5, delivered, 2 returned   1000.00 - 400.00 = 600.00, wrong size, received
+ * The Owner is a real Owner (the dev stack has OWNER_MFA_REQUIRED=False, so no TOTP). Names and codes are unique per
+ * run. It changes the shop-wide fees, so run it on a throwaway stack only.
+ */
+export function seedReportsShop(): ReportsSeed {
+  const run = Date.now().toString(36);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const year = 2000 + Math.floor(Math.random() * 20);
+    const month = 1 + Math.floor(Math.random() * 12);
+    const day = 1 + Math.floor(Math.random() * 20);
+    const from = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const out = runDjangoScript(reportsScript(run, from));
+    const match = out.match(/SEEDED (\{.*\})/);
+    if (match?.[1]) return JSON.parse(match[1]) as ReportsSeed;
+    if (!out.includes("WINDOW_TAKEN")) throw new Error(`seeding reports failed (see api container logs):\n${out}`);
+  }
+  throw new Error("no free report window after 5 tries");
+}
+
+function reportsScript(run: string, from: string): string {
+  const owner = { email: `e2e-owner-${run}@example.com`, password: `E2e-${run}-Pass!9x` };
+  const voucher = `E2E${run.toUpperCase()}RPT`;
+  return `
+import json
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from zoneinfo import ZoneInfo
+
+from allauth.account.models import EmailAddress
+from django.conf import settings
+from django.contrib.auth.models import Group
+from django.test import Client
+from django.utils import timezone
+from oscar.apps.catalogue.models import ProductClass
+from oscar.apps.order.models import Order
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog, order_ops, returns, shop_settings, voucher_admin
+from store_backend.shop.models import OrderFeeSnapshot, ReturnRequest
+from store_backend.users.models import User
+
+ISTANBUL = ZoneInfo("Europe/Istanbul")
+start = date.fromisoformat(${JSON.stringify(from)})
+end = start + timedelta(days=6)
+lo = datetime.combine(start, datetime.min.time(), ISTANBUL)
+hi = datetime.combine(end + timedelta(days=1), datetime.min.time(), ISTANBUL)
+if Order.objects.filter(date_placed__gte=lo - timedelta(days=7), date_placed__lt=hi).exists():
+    print("WINDOW_TAKEN")
+    raise SystemExit
+
+settings.ALLOWED_HOSTS = ["*"]
+store = shop_settings.get()
+store.cod_fee = "15.00"
+store.save()
+
+owner = User(email=${JSON.stringify(owner.email)}, is_staff=True)
+owner.set_password(${JSON.stringify(owner.password)})
+owner.save()
+owner.groups.add(Group.objects.get(name="Owner"))
+EmailAddress.objects.create(user=owner, email=owner.email, verified=True, primary=True)
+
+colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Mavi ${run}`)}, "#0000ff")
+category = catalog.create_category(${JSON.stringify(`Rapor ${run}`)})
+product_class = ProductClass.objects.get(name="Giyim")
+
+def product(title, price):
+    made = catalog.create_product(title=title, product_class=product_class, category=category, shelf_price=price)
+    variant = catalog.create_variant(made, colour=colour, size="M", stock=50)
+    ProductProfile.objects.filter(product=made).update(status=ProductStatus.PUBLISHED)
+    return variant
+
+cheap = product(${JSON.stringify(`Rapor Elbise ${run}`)}, "100.00")
+dear = product(${JSON.stringify(`Rapor Gömlek ${run}`)}, "200.00")
+now = timezone.now()
+voucher_admin.create(
+    None, code=${JSON.stringify(voucher)}, kind="percentage", value=Decimal("10"), minimum=None, cap=None,
+    once_per_customer=False, starts_at=now - timedelta(days=1), ends_at=None,
+)
+
+counter = [0]
+
+def place(variant, quantity, cod, code=None):
+    counter[0] += 1
+    client = Client(enforce_csrf_checks=False, REMOTE_ADDR=f"198.51.100.{counter[0]}", HTTP_HOST="localhost")
+    csrf = client.get("/api/store/csrf").json()["csrf_token"]
+    headers = {"X-CSRFToken": csrf}
+    added = client.post("/api/store/basket/lines", {"variant_id": variant.pk, "quantity": quantity}, content_type="application/json", headers=headers)
+    assert added.status_code == 200, added.content
+    if code:
+        applied = client.post("/api/store/basket/voucher", {"code": code}, content_type="application/json", headers=headers)
+        assert applied.status_code == 200, applied.content
+    body = {
+        "full_name": "Ayşe Yılmaz", "email": f"rapor{counter[0]}-${run}@example.com", "phone": "0532 123 45 67",
+        "shipping_address": {"il": "Mersin", "ilce": "Yenişehir", "mahalle": "Çiftlikköy Mah.", "street": "Gül Sok. No:5 D:3", "postal_code": "33110"},
+        "payment_method": "cod" if cod else "bank_transfer", "contract_acknowledged": True,
+    }
+    if cod:
+        body["cod_fee_consent"] = True
+    placed = client.post("/api/store/checkout", body, content_type="application/json", headers=headers)
+    assert placed.status_code == 201, placed.content
+    return placed.json()
+
+def on_day(number, day):
+    at = datetime.combine(start + timedelta(days=day - 1), datetime.min.time(), ISTANBUL).replace(hour=12)
+    Order.objects.filter(number=number).update(date_placed=at)
+
+one = place(cheap, 2, cod=True)
+two = place(dear, 1, cod=False)
+order_ops.mark_paid(owner, two["number"], amount=Order.objects.get(number=two["number"]).total_incl_tax, paid_at=timezone.now())
+cancelled = place(cheap, 1, cod=True)
+order_ops.cancel(owner, cancelled["number"], reason="E2E: vazgeçti")
+three = place(cheap, 2, cod=True, code=${JSON.stringify(voucher)})
+four = place(dear, 5, cod=True)
+order_ops.ship(owner, four["number"], carrier="Aras", tracking_number="1")
+order_ops.deliver(owner, four["number"])
+line = Order.objects.get(number=four["number"]).lines.get()
+asked = Client(enforce_csrf_checks=False, REMOTE_ADDR="198.51.100.99", HTTP_HOST="localhost")
+csrf = asked.get("/api/store/csrf").json()["csrf_token"]
+filed = asked.post(
+    "/api/store/tracking/link/" + four["tracking_token"] + "/returns",
+    {"lines": [{"line_id": line.pk, "quantity": 2}], "reason": "wrong_size"},
+    content_type="application/json", headers={"X-CSRFToken": csrf},
+)
+assert filed.status_code == 201, filed.content
+request = ReturnRequest.objects.filter(order__number=four["number"]).latest("pk")
+returns.approve(owner, four["number"], request.pk)
+returns.mark_received(owner, four["number"], request.pk, restock={line.pk: True})
+
+for number, day in ((one["number"], 1), (two["number"], 2), (cancelled["number"], 2), (three["number"], 3), (four["number"], 4)):
+    on_day(number, day)
+
+sold = [one, two, three, four]  # the cancelled order brings no fees
+def fee_total(kind):
+    rows = OrderFeeSnapshot.objects.filter(order__number__in=[o["number"] for o in sold], kind=kind)
+    return str(sum((row.total_incl for row in rows), Decimal("0.00")))
+
+print("SEEDED " + json.dumps({
+    "from": start.isoformat(), "to": end.isoformat(),
+    "fees": {"shipping": fee_total("shipping"), "cod": fee_total("cod")},
+    "owner": {"email": owner.email, "password": ${JSON.stringify(owner.password)}},
+    "cheap": ${JSON.stringify(`Rapor Elbise ${run}`)}, "dear": ${JSON.stringify(`Rapor Gömlek ${run}`)}, "voucher": ${JSON.stringify(voucher)},
+}))
+`;
+}
