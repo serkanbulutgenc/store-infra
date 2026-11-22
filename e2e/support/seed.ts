@@ -290,7 +290,7 @@ from store_backend.services import catalog, media
 from store_backend.users.models import User
 
 actor = User(email="e2e-colour-${run}@example.com", is_staff=True)
-actor.set_password("E2e-${run}-Pass!9x")
+actor.set_unusable_password()
 actor.save()
 actor.groups.add(Group.objects.get(name="Staff"))
 
