@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { runDjangoScript } from "./stack";
 
 export interface Seed {
@@ -758,4 +759,51 @@ print("SEEDED " + json.dumps({
     "cheap": ${JSON.stringify(`Rapor Elbise ${run}`)}, "dear": ${JSON.stringify(`Rapor Gömlek ${run}`)}, "voucher": ${JSON.stringify(voucher)},
 }))
 `;
+}
+
+export interface ImportSeed {
+  owner: { email: string; password: string };
+  /** A colour the CSV can name (the import does not create colours). */
+  colour: string;
+  /** Unique per run, so the imported Product and its Category are new each time. */
+  run: string;
+}
+
+/** A real Owner (the dev stack has OWNER_MFA_REQUIRED=False) and one Colour, for the catalogue import. */
+export function seedImportShop(): ImportSeed {
+  const run = Date.now().toString(36);
+  const owner = {
+    email: `e2e-import-owner-${run}@example.com`,
+    password: `${randomBytes(12).toString("hex")}-Aa1!`,
+  };
+  const colour = `${run.slice(-3).toUpperCase()} Ithal ${run}`;
+  const script = `
+from allauth.account.models import EmailAddress
+from django.contrib.auth.models import Group
+from store_backend.services import catalog
+from store_backend.users.models import User
+
+owner = User(email=${JSON.stringify(owner.email)}, is_staff=True)
+owner.set_password(${JSON.stringify(owner.password)})
+owner.save()
+owner.groups.add(Group.objects.get(name="Owner"))
+EmailAddress.objects.create(user=owner, email=owner.email, verified=True, primary=True)
+catalog.create_colour(${JSON.stringify(colour)}, "#336699")
+print("SEEDED")
+`;
+  const out = runDjangoScript(script);
+  if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
+  return { owner, colour, run };
+}
+
+/** The stored Description (Markdown) of the Product with this title, read from the database. */
+export function descriptionOf(title: string): string {
+  const out = runDjangoScript(`
+import json
+from oscar.apps.catalogue.models import Product
+print("DESCRIPTION " + json.dumps(Product.objects.get(title=${JSON.stringify(title)}).description))
+`);
+  const match = out.match(/DESCRIPTION (".*")/);
+  if (!match?.[1]) throw new Error(`could not read the description:\n${out}`);
+  return JSON.parse(match[1]) as string;
 }
