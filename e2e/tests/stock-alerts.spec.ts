@@ -42,7 +42,7 @@ async function asStaff<T>(browser: Browser, baseURL: string | undefined, work: (
 /** The product page with the sold-out Size M picked. */
 async function pickSoldOutSize(page: Page) {
   await page.goto(`/urun/${shop.slug}`);
-  await page.getByRole("button", { name: /^M/ }).click();
+  await page.getByRole("button", { name: "M (tükendi)" }).click();
   await expect(page.getByRole("button", { name: "Tükendi", exact: true })).toBeDisabled();
 }
 
@@ -101,7 +101,7 @@ test("the Dashboard switch turns Haber ver on", async ({ browser, baseURL, page 
 
 test("an in-stock Size has no Haber ver", async ({ page }) => {
   await page.goto(`/urun/${shop.slug}`);
-  await page.getByRole("button", { name: /^L/ }).click();
+  await page.getByRole("button", { name: "L", exact: true }).click();
 
   await expect(page.getByRole("button", { name: "Sepete ekle" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Haber ver", exact: true })).toHaveCount(0);

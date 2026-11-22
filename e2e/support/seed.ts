@@ -262,6 +262,64 @@ print("SEEDED")
   return { title };
 }
 
+export interface ColourSeed {
+  title: string;
+  /** Colour names: `first` is the default pick (S, M in stock); `second` has M (sold out) and L. */
+  first: string;
+  second: string;
+}
+
+/**
+ * A published product with two colours for the colour switch: the first has sizes S and M in
+ * stock and one photo; the second has M (sold out) and L and two photos, so only it shows
+ * thumbnails. Leaves shop settings alone.
+ */
+export function seedColourProduct(): ColourSeed {
+  const run = Date.now().toString(36);
+  const title = `E2E Renkli ${run}`;
+  const first = `${run.slice(-3).toUpperCase()} Kırmızı ${run}`;
+  const second = `${run.slice(-3).toUpperCase()} Turuncu ${run}`;
+  const script = `
+import io
+from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
+from oscar.apps.catalogue.models import ProductClass
+from PIL import Image
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog, media
+from store_backend.users.models import User
+
+actor = User(email="e2e-colour-${run}@example.com", is_staff=True)
+actor.set_password("E2e-${run}-Pass!9x")
+actor.save()
+actor.groups.add(Group.objects.get(name="Staff"))
+
+red = catalog.create_colour(${JSON.stringify(first)}, "#cc0000")
+orange = catalog.create_colour(${JSON.stringify(second)}, "#ff8800")
+category = catalog.create_category("E2E Renkli ${run}")
+product = catalog.create_product(
+    title=${JSON.stringify(title)},
+    product_class=ProductClass.objects.get(name="Giyim"),
+    category=category,
+    shelf_price="100.00",
+)
+catalog.create_variant(product, colour=red, size="S", stock=10)
+catalog.create_variant(product, colour=red, size="M", stock=10)
+catalog.create_variant(product, colour=orange, size="M", stock=0)
+catalog.create_variant(product, colour=orange, size="L", stock=10)
+for colour, shade in ((red, (200, 30, 30)), (orange, (255, 136, 0)), (orange, (255, 200, 0))):
+    buf = io.BytesIO()
+    Image.new("RGB", (900, 1200), shade).save(buf, "PNG")
+    photo = media.upload(actor, product, SimpleUploadedFile("p.png", buf.getvalue(), "image/png"), colour=colour)
+    media.process(photo.pk)
+ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+print("SEEDED")
+`;
+  const out = runDjangoScript(script);
+  if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
+  return { title, first, second };
+}
+
 export interface DescriptionSeed {
   id: number;
   title: string;
