@@ -147,6 +147,43 @@ test("a Staff edit of a live Campaign page stays hidden until the Owner approves
   await visitor.close();
 });
 
+test("a rejected edit of a live Campaign page shows its reason to Staff and the live text stays", async ({
+  browser,
+  baseURL,
+}) => {
+  const rejectedEdit = `Reddedilecek metin ${run}.`;
+  const staff = await as(browser, baseURL, staffState);
+  const sp = staff.page;
+  await sp.goto("/admin/campaign-pages");
+  await sp.getByRole("link", { name: page.title, exact: true }).click();
+  await sp.getByLabel("Metin (Markdown)").fill(rejectedEdit);
+  await sp.getByRole("button", { name: "Onaya gönder" }).click();
+  await expect(sp.getByText("Değişiklik onaya gönderildi.").first()).toBeVisible();
+  // Nothing was rejected yet, so no reason is shown.
+  await expect(sp.getByText(/^Reddedildi:/)).toHaveCount(0);
+
+  const owner = await as(browser, baseURL, ownerState);
+  const dialog = await review(owner.page, page.title);
+  await dialog.getByLabel(/Gerekçe/).fill(page.reason);
+  await dialog.getByRole("button", { name: "Reddet" }).click();
+  await expect(owner.page.getByText("Reddedildi.").first()).toBeVisible();
+  await owner.context.close();
+
+  // The page is still live, with no pending change, and Staff are told why the edit went.
+  await sp.reload();
+  await expect(sp.getByText("Yayında").first()).toBeVisible();
+  await expect(sp.getByRole("heading", { name: "Bekleyen değişiklik" })).toHaveCount(0);
+  await expect(sp.getByText(`Reddedildi: ${page.reason}`)).toBeVisible();
+  await staff.context.close();
+
+  const visitor = await browser.newContext({ baseURL, locale: "tr-TR" });
+  const vp = await visitor.newPage();
+  await vp.goto(`/kampanyalar/${page.slug}`);
+  await expect(vp.getByText(page.edited)).toBeVisible();
+  await expect(vp.getByText(rejectedEdit)).toHaveCount(0);
+  await visitor.close();
+});
+
 test("a rejected Campaign page shows its reason to Staff and stays off the Storefront", async ({
   browser,
   baseURL,
