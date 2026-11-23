@@ -1,22 +1,27 @@
 import { expect, test } from "@playwright/test";
 import { useStaffLogin } from "../support/auth";
 
-// Campaigns are the Owner's: plain Staff do not see the screen, cannot reach it by URL and the
-// API refuses them. (Staff do see which Campaign an Order used: see campaign-flow.spec.ts.)
+// Discount Campaigns are the Owner's: plain Staff cannot create or open one and the API refuses
+// them. Staff may edit Campaign pages, so the Kampanyalar entry shows them that tab alone (see
+// admin-campaigns-hub.spec.ts). (Staff do see which Campaign an Order used: campaign-flow.spec.ts.)
 useStaffLogin();
 
-test("Staff have no Kampanyalar entry in the Dashboard menu", async ({ page }) => {
+test("Staff see Kampanyalar with the pages only, no Campaign tab or creation", async ({ page }) => {
   await page.goto("/admin");
   await expect(page.getByRole("link", { name: "Siparişler" }).first()).toBeVisible();
-  await expect(page.getByRole("link", { name: "Kampanyalar" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Kampanyalar", exact: true }).first().click();
+  await expect(page.getByRole("link", { name: "Yeni kampanya sayfası" })).toBeVisible();
+  await expect(page.getByRole("tab")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Yeni kampanya", exact: true })).toHaveCount(0);
 });
 
-test("Staff who open the Campaign screen by its address are sent back to the Dashboard home", async ({
+test("Staff who open a Campaign's own page by its address are sent back to the Dashboard home", async ({
   page,
 }) => {
-  await page.goto("/admin/campaigns");
+  await page.goto("/admin/campaigns/new");
   await expect(page).toHaveURL(/\/admin\/?$/);
-  await expect(page.getByRole("heading", { name: "Kampanyalar" })).toHaveCount(0);
+  await page.goto("/admin/campaigns/1");
+  await expect(page).toHaveURL(/\/admin\/?$/);
 });
 
 test("the API refuses Staff the Campaign list", async ({ page }) => {

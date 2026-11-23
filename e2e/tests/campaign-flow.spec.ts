@@ -39,7 +39,9 @@ async function openListing(page: Page) {
 
 test("the Owner creates and activates a Campaign on a Category", async ({ page }) => {
   await page.goto("/admin/campaigns");
-  await page.getByRole("button", { name: "Yeni kampanya" }).click();
+  await page.getByRole("link", { name: "Yeni kampanya" }).click();
+  await expect(page).toHaveURL(/\/admin\/campaigns\/new$/); // its own page, not a dialog
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByLabel("Kampanya adı").fill(campaign);
   await page.getByLabel("İndirim yüzdesi").fill("20");
   // The Category field is an autocomplete: nothing is listed under it until it is used.
@@ -89,13 +91,17 @@ test("checkout charges the Campaign price, and the Order screen shows the Campai
   await page.getByRole("link", { name: number }).click();
   await expect(page.getByText(`Kampanya: ${campaign}`)).toBeVisible();
   await expect(page.getByText(`(₺80,00)`).first()).toBeVisible(); // the frozen Campaign price
-  // The Owner's Campaign name opens that Campaign for editing on the Campaign screen.
+  // The Owner's Campaign name opens that Campaign on its own admin page.
   await page.getByRole("link", { name: campaign }).click();
-  await expect(page).toHaveURL(/\/admin\/campaigns\?edit=\d+/);
-  await expect(page.getByRole("dialog", { name: "Kampanyayı düzenle" })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/campaigns\/\d+$/);
+  const id = page.url().split("/").pop();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByLabel("Kampanya adı")).toHaveValue(campaign);
   await page.getByRole("button", { name: "Vazgeç" }).click();
-  await expect(page).not.toHaveURL(/edit=/); // closing takes the param off the address
+  await expect(page).toHaveURL(/\/admin\/campaigns\?tab=campaigns/); // back on the list
+  // An old `?edit=` link lands on the same page.
+  await page.goto(`/admin/campaigns?edit=${id}`);
+  await expect(page).toHaveURL(/\/admin\/campaigns\/\d+$/);
 });
 
 test("a Voucher comes off the Campaign price", async ({ page, browser, baseURL }) => {
