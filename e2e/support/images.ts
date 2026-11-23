@@ -37,3 +37,45 @@ export function solidPng(width: number, height: number, [r, g, b]: [number, numb
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
+
+/** A solid-colour GIF of the given size (single frame, uncompressed LZW codes: a clear code every
+ * two pixels keeps the code size at 3 bits), for upload rules that take GIFs. */
+export function solidGif(width: number, height: number) {
+  const bits: number[] = [];
+  const put = (code: number) => {
+    for (let i = 0; i < 3; i++) bits.push((code >> i) & 1);
+  };
+  const pixels = width * height;
+  for (let i = 0; i < pixels; i += 2) {
+    put(4); // clear
+    put(0);
+    if (i + 1 < pixels) put(0);
+  }
+  put(5); // end of information
+  const bytes: number[] = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let byte = 0;
+    for (let j = 0; j < 8; j++) byte |= (bits[i + j] ?? 0) << j;
+    bytes.push(byte);
+  }
+  const blocks: number[] = [];
+  for (let i = 0; i < bytes.length; i += 255) {
+    const part = bytes.slice(i, i + 255);
+    blocks.push(part.length, ...part);
+  }
+  const le = (n: number) => [n & 0xff, n >> 8];
+  return Buffer.from([
+    ...Buffer.from("GIF89a"),
+    ...le(width),
+    ...le(height),
+    0x80, // global palette, 2 colours
+    0,
+    0,
+    200, 30, 30, 255, 255, 255,
+    0x2c, ...le(0), ...le(0), ...le(width), ...le(height), 0,
+    2, // minimum code size
+    ...blocks,
+    0,
+    0x3b,
+  ]);
+}

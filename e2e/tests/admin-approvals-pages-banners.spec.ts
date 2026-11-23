@@ -68,8 +68,10 @@ test("a Staff Campaign page goes live only once the Owner approves it", async ({
 }) => {
   const staff = await as(browser, baseURL, staffState);
   const sp = staff.page;
-  await sp.goto("/admin/campaign-pages");
-  await sp.getByRole("button", { name: "Yeni kampanya sayfası" }).click();
+  await sp.goto("/admin/campaign-pages"); // redirects to the Kampanyalar screen
+  await expect(sp).toHaveURL(/\/admin\/campaigns\?tab=pages/);
+  await sp.getByRole("link", { name: "Yeni kampanya sayfası" }).click();
+  await expect(sp).toHaveURL(/\/admin\/campaign-pages\/new$/);
   await sp.getByLabel("Başlık").fill(page.title);
   await sp.getByRole("button", { name: "Oluştur" }).click();
   await expect(sp.getByRole("heading", { name: page.title })).toBeVisible();
@@ -190,8 +192,10 @@ test("a rejected Campaign page shows its reason to Staff and stays off the Store
 }) => {
   const staff = await as(browser, baseURL, staffState);
   const sp = staff.page;
-  await sp.goto("/admin/campaign-pages");
-  await sp.getByRole("button", { name: "Yeni kampanya sayfası" }).click();
+  await sp.goto("/admin/campaign-pages"); // redirects to the Kampanyalar screen
+  await expect(sp).toHaveURL(/\/admin\/campaigns\?tab=pages/);
+  await sp.getByRole("link", { name: "Yeni kampanya sayfası" }).click();
+  await expect(sp).toHaveURL(/\/admin\/campaign-pages\/new$/);
   await sp.getByLabel("Başlık").fill(page.rejectedTitle);
   await sp.getByRole("button", { name: "Oluştur" }).click();
   await expect(sp.getByRole("heading", { name: page.rejectedTitle })).toBeVisible();
