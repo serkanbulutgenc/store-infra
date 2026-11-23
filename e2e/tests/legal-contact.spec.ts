@@ -70,6 +70,9 @@ test("changing a Legal page's address redirects the old URL and the footer follo
   op.once("dialog", (d) => void d.accept());
   await op.getByRole("button", { name: "Adresi değiştir" }).click();
   await expect(op.getByText("Adres değiştirildi.").first()).toBeVisible();
+  // The editor lists the earlier address, which still opens the page.
+  await op.reload();
+  await expect(op.getByRole("listitem").filter({ hasText: `/yasal/${legal.slug}` })).toBeVisible();
   await context.close();
 
   const visitor = await browser.newContext({ baseURL, locale: "tr-TR" });
