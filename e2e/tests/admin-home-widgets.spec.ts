@@ -47,6 +47,17 @@ const order = (page: Page) =>
     .locator('section[aria-labelledby^="widget-"]')
     .evaluateAll((els) => els.map((el) => el.getAttribute("aria-labelledby")));
 
+/** The Banner's own state. The Storefront's announcement bar shows one message at a time, so
+ * another live announcement on the stack would hide this one; the state does not depend on it. */
+const statusOf = (message: string) =>
+  /STATUS=(\w+)/.exec(
+    runDjangoScript(`
+from store_backend.catalog.models import Banner
+
+print("STATUS=" + Banner.objects.get(message=${JSON.stringify(message)}).status)
+`),
+  )?.[1];
+
 const count = async (page: Page, title: string) => {
   const text = (await page.getByRole("heading", { name: new RegExp(`^${title} \\(`) }).textContent()) ?? "";
   return Number(/\((\d+)\)/.exec(text)?.[1]);
@@ -98,8 +109,11 @@ test("a person's own layout survives a reload and can be reset", async ({ browse
 
   await p.getByRole("button", { name: "Düzenle" }).click();
   const editor = p.getByRole("region", { name: "Ana sayfayı düzenle" });
-  await editor.getByLabel("Azalan stok", { exact: true }).uncheck();
+  // The checkbox follows the server's answer, so click it and wait for the result rather than
+  // `uncheck()`, which expects the state to flip at once.
+  await editor.getByLabel("Azalan stok", { exact: true }).click();
   await expect(widget(p, "Azalan stok")).toHaveCount(0);
+  await expect(editor.getByLabel("Azalan stok", { exact: true })).not.toBeChecked();
   await editor.getByRole("button", { name: "Yeni siparişler: aşağı taşı" }).click();
   await expect.poll(() => order(p)).toEqual([
     "widget-unpaid-transfers",
@@ -137,17 +151,14 @@ test("the Owner approves a Staff submission from the Approvals Widget", async ({
   await sp.goto("/admin/banners");
   await sp.getByRole("button", { name: "Yeni banner" }).click();
   await sp.getByLabel("Alan", { exact: true }).selectOption({ label: "Duyuru çubuğu" });
-  await sp.getByLabel("Mesaj").fill(banner.message);
+  await sp.getByRole("textbox", { name: "Mesaj", exact: true }).fill(banner.message);
   await sp.getByRole("button", { name: "Oluştur" }).click();
   await expect(sp.getByRole("heading", { name: banner.message })).toBeVisible();
   await sp.getByRole("button", { name: "Onaya gönder" }).first().click();
   await expect(sp.getByText("Banner onaya gönderildi.").first()).toBeVisible();
   await staff.context.close();
 
-  const visitor = await browser.newContext({ baseURL, locale: "tr-TR" });
-  const vp = await visitor.newPage();
-  await vp.goto("/");
-  await expect(vp.getByText(banner.message)).toHaveCount(0);
+  expect(statusOf(banner.message)).toBe("pending_approval");
 
   const owner = await as(browser, baseURL, ownerState);
   const op = owner.page;
@@ -161,8 +172,7 @@ test("the Owner approves a Staff submission from the Approvals Widget", async ({
   await expect(dialog).toContainText("Duyuru çubuğu");
   await expect(dialog).toContainText("mağazada yayınlanır");
   await dialog.getByRole("button", { name: "Vazgeç" }).click();
-  await vp.reload();
-  await expect(vp.getByText(banner.message)).toHaveCount(0);
+  expect(statusOf(banner.message)).toBe("pending_approval");
 
   await op.getByRole("button", { name: `${banner.message} onayla` }).click();
   await op.getByRole("dialog").getByRole("button", { name: "Onayla" }).click();
@@ -170,8 +180,6 @@ test("the Owner approves a Staff submission from the Approvals Widget", async ({
   await expect(op.getByRole("button", { name: `${banner.message} onayla` })).toHaveCount(0);
   await expect.poll(() => count(op, "Onay bekleyenler")).toBe(before - 1);
 
-  await vp.reload();
-  await expect(vp.getByRole("region", { name: "Duyurular" })).toContainText(banner.message);
-  await visitor.close();
+  expect(statusOf(banner.message)).toBe("published");
   await owner.context.close();
 });
