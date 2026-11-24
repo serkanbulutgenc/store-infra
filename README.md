@@ -73,7 +73,7 @@ pnpm test                         # E2E_BASE_URL defaults to http://localhost:80
 
 `e2e/tests/admin-product.spec.ts` checks the product editor tabs (Staff do not see cost price or Supplier, unsaved edits survive tab switches and save in one request, the old photos URL lands on the Fotoğraflar tab).
 
-`e2e/tests/admin-settings.spec.ts` checks the tabbed Settings form (one PATCH for edits in two tabs; an invalid field in a hidden tab marks it and blocks the save). Specs log in once and reuse the session (`e2e/support/auth.ts`) because the login endpoint allows 10 a minute per IP.
+`e2e/tests/admin-settings.spec.ts` checks the tabbed Settings form (one PATCH for edits in two tabs; an invalid field in a hidden tab marks it and blocks the save). It also covers the Owner's several bank accounts (store-infra#146): add, reorder and delete accounts, an IBAN typed with spaces is stored clean, a wrong IBAN names its row and blocks the save, and there is no home banner tab (that lives in Banner'lar). The spec restores the shop's bank accounts in `afterAll`. Specs log in once and reuse the session (`e2e/support/auth.ts`) because the login endpoint allows 10 a minute per IP.
 
 `e2e/tests/admin-shell.spec.ts` logs in as a seeded Staff user (`seedStaff`, which leaves shop settings alone) and checks the Dashboard shell: grouped sidebar, Owner-only items hidden, collapse persisted across a reload, keyboard use, breadcrumbs, user menu, sign-out and the phone menu.
 
