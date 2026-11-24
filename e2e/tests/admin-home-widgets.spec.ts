@@ -7,7 +7,8 @@ import { runDjangoScript } from "../support/stack";
 // Widgets; a person's own layout (off, order, reset) survives a reload; the Owner approves a Staff
 // submission straight from the Approvals Widget and the count drops; Staff never see the
 // Owner-only Widgets (Onay bekleyenler, Onay bekleyen yanıtlar, Satış özeti), not even in the
-// editor's list.
+// editor's list. Cards (#144) fold to their header, can be dismissed (with an undo), are dragged
+// into a new order, carry an icon, and all of it is remembered across a reload.
 const run = Date.now().toString(36);
 const banner = { message: `E2E ana sayfa duyurusu ${run}` };
 
@@ -182,4 +183,154 @@ test("the Owner approves a Staff submission from the Approvals Widget", async ({
 
   expect(statusOf(banner.message)).toBe("published");
   await owner.context.close();
+});
+
+/** Back to the role's default, through the API, so a test starts from a known page. */
+async function resetLayout(page: Page) {
+  const res = await page.request.delete("/api/admin/home/layout");
+  expect(res.ok(), await res.text()).toBe(true);
+  await page.goto("/admin");
+}
+
+const DEFAULT_ORDER = [
+  "widget-new-orders",
+  "widget-unpaid-transfers",
+  "widget-open-returns",
+  "widget-low-stock",
+];
+
+test("every card has an icon in its header", async ({ browser, baseURL }) => {
+  const staff = await as(browser, baseURL, staffState);
+  await resetLayout(staff.page);
+  for (const title of EVERYONE) {
+    await expect(widget(staff.page, title).locator("header svg").first(), title).toBeVisible();
+  }
+  await staff.context.close();
+});
+
+test("a card folds to its header and stays folded after a reload", async ({
+  browser,
+  baseURL,
+}) => {
+  const staff = await as(browser, baseURL, staffState);
+  const p = staff.page;
+  await resetLayout(p);
+  const card = widget(p, "Yeni siparişler");
+  const body = card.getByText("Bekleyen yeni sipariş yok.");
+  await expect(body).toBeVisible();
+
+  await p.getByRole("button", { name: "Yeni siparişler: daralt" }).click();
+  await expect(body).toBeHidden();
+  await expect(card.getByRole("heading")).toBeVisible(); // the header stays
+  await expect(p.getByRole("button", { name: "Yeni siparişler: aç" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  // Only that card folded.
+  await expect(widget(p, "Azalan stok").getByRole("button", { name: /daralt/ })).toBeVisible();
+
+  await p.reload();
+  await expect(widget(p, "Yeni siparişler").getByText("Bekleyen yeni sipariş yok.")).toBeHidden();
+
+  await p.getByRole("button", { name: "Yeni siparişler: aç" }).click();
+  await expect(widget(p, "Yeni siparişler").getByText("Bekleyen yeni sipariş yok.")).toBeVisible();
+  await p.reload();
+  await expect(widget(p, "Yeni siparişler").getByText("Bekleyen yeni sipariş yok.")).toBeVisible();
+  await staff.context.close();
+});
+
+test("a card can be dismissed, undone, and brought back from the editor", async ({
+  browser,
+  baseURL,
+}) => {
+  const staff = await as(browser, baseURL, staffState);
+  const p = staff.page;
+  await resetLayout(p);
+
+  await p.getByRole("button", { name: "Bekleyen iade talepleri: kaldır" }).click();
+  await expect(widget(p, "Bekleyen iade talepleri")).toHaveCount(0);
+  await p.getByRole("button", { name: "Geri al" }).click();
+  await expect.poll(() => order(p)).toEqual(DEFAULT_ORDER); // back where it was
+
+  await p.getByRole("button", { name: "Bekleyen iade talepleri: kaldır" }).click();
+  await expect(widget(p, "Bekleyen iade talepleri")).toHaveCount(0);
+  await p.reload();
+  await expect(widget(p, "Bekleyen iade talepleri")).toHaveCount(0); // it stays dismissed
+
+  await p.getByRole("button", { name: "Düzenle" }).click();
+  await p
+    .getByRole("region", { name: "Ana sayfayı düzenle" })
+    .getByLabel("Bekleyen iade talepleri", { exact: true })
+    .click();
+  await expect(widget(p, "Bekleyen iade talepleri")).toBeVisible();
+  await expect.poll(() => order(p)).toEqual([
+    "widget-new-orders",
+    "widget-unpaid-transfers",
+    "widget-low-stock",
+    "widget-open-returns",
+  ]);
+  await staff.context.close();
+});
+
+test("cards are reordered by dragging and the order is remembered", async ({
+  browser,
+  baseURL,
+}) => {
+  const staff = await as(browser, baseURL, staffState);
+  const p = staff.page;
+  await resetLayout(p);
+
+  // dnd-kit drops on the card whose centre is nearest the dragged card's centre, so move the
+  // handle by the distance between the two cards' centres.
+  const handle = p.getByRole("button", { name: "Azalan stok: sürükle" });
+  const source = (await widget(p, "Azalan stok").boundingBox())!;
+  const target = (await widget(p, "Yeni siparişler").boundingBox())!;
+  const grip = (await handle.boundingBox())!;
+  const dx = target.x + target.width / 2 - (source.x + source.width / 2);
+  const dy = target.y + target.height / 2 - (source.y + source.height / 2);
+  await p.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(grip.x + grip.width / 2 + dx / 4, grip.y + grip.height / 2 + dy / 4, { steps: 5 });
+  await p.mouse.move(grip.x + grip.width / 2 + dx, grip.y + grip.height / 2 + dy, { steps: 15 });
+  await p.mouse.up();
+
+  await expect.poll(() => order(p)).toEqual([
+    "widget-low-stock",
+    "widget-new-orders",
+    "widget-unpaid-transfers",
+    "widget-open-returns",
+  ]);
+  await p.reload();
+  await expect.poll(() => order(p)).toEqual([
+    "widget-low-stock",
+    "widget-new-orders",
+    "widget-unpaid-transfers",
+    "widget-open-returns",
+  ]);
+  await resetLayout(p);
+  await staff.context.close();
+});
+
+test("a card can be moved from the keyboard too", async ({ browser, baseURL }) => {
+  const staff = await as(browser, baseURL, staffState);
+  const p = staff.page;
+  await resetLayout(p);
+  await p.getByRole("button", { name: "Süresi dolmak üzere olan havaleler: sürükle" }).focus();
+  // Each key waits for the drag's own announcement: a key sent before the drag has started or
+  // moved is lost.
+  const status = p.getByRole("status").filter({ hasText: "Süresi dolmak üzere olan havaleler" });
+  await p.keyboard.press("Space");
+  await expect(status).toContainText("2. sıraya taşınacak");
+  await p.keyboard.press("ArrowLeft");
+  await expect(status).toContainText("1. sıraya taşınacak");
+  await p.keyboard.press("Space");
+  await expect(status).toContainText("1. sıraya bırakıldı");
+  await expect.poll(() => order(p)).toEqual([
+    "widget-unpaid-transfers",
+    "widget-new-orders",
+    "widget-open-returns",
+    "widget-low-stock",
+  ]);
+  await resetLayout(p);
+  await staff.context.close();
 });
