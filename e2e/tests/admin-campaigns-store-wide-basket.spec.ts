@@ -179,6 +179,44 @@ test("free shipping waives the shipping fee, and the order says why", async ({
   await expect(page.getByText("Ücretsiz kargo", { exact: true })).toBeVisible();
 });
 
+test("a discount and free shipping both apply, and the basket lists each", async ({
+  page,
+  browser,
+  baseURL,
+}) => {
+  // The free-shipping Campaign from the last test is still on; add a TL discount beside it.
+  await openBasketTab(page);
+  await page.getByRole("link", { name: "Yeni sepet kampanyası" }).click();
+  await page.getByLabel("Kampanya adı").fill(`${basket} indirim`);
+  await page.getByLabel("Asgari sepet tutarı (₺)").fill("100");
+  await page.getByLabel("İndirim tutarı (₺)").fill("10");
+  await page.getByRole("button", { name: "Kaydet" }).click();
+  await expect(page.getByRole("row", { name: new RegExp(`${basket} indirim`) })).toBeVisible();
+
+  const guest = await shopper(browser, baseURL);
+  await addToBasket(guest.page, seed);
+  await guest.page.goto("/sepet");
+  // Both are listed, with what is left after them.
+  await expect(guest.page.getByText("100 ₺ üzeri 10 ₺ indirim")).toBeVisible();
+  await expect(guest.page.getByText("−₺10,00")).toBeVisible();
+  await expect(guest.page.getByText("100 ₺ üzeri ücretsiz kargo")).toBeVisible();
+  await expect(guest.page.getByText("Ücretsiz kargo", { exact: true })).toBeVisible();
+  await expect(guest.page.getByText("İndirimli ara toplam")).toBeVisible();
+  await expect(guest.page.getByText("₺90,00").first()).toBeVisible(); // 100 - 10
+  await applyVoucher(guest.page, voucher);
+  await expect(guest.page.getByText("−₺9,00")).toBeVisible(); // 10% of 90
+  await expect(guest.page.getByText("₺81,00").first()).toBeVisible(); // 100 - 10 - 9
+  const number = await checkoutAndPlace(guest.page, "both-campaigns@example.com");
+  await expect(guest.page.getByText("100 ₺ üzeri 10 ₺ indirim")).toBeVisible();
+  await expect(guest.page.getByText("100 ₺ üzeri ücretsiz kargo")).toBeVisible();
+  await guest.close();
+
+  await page.goto("/admin/orders");
+  await page.getByRole("link", { name: number }).click();
+  await expect(page.getByText("Sepet kampanyası (100 ₺ üzeri 10 ₺ indirim)")).toBeVisible();
+  await expect(page.getByText("Sepet kampanyası (100 ₺ üzeri ücretsiz kargo)")).toBeVisible();
+});
+
 test("a Basket Campaign an Order used can be closed but not deleted", async ({
   page,
   browser,
