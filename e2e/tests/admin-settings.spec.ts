@@ -27,6 +27,13 @@ from store_backend.shop.models import BankAccount
 print("ACCOUNTS " + json.dumps(list(BankAccount.objects.values("name", "account_holder", "iban"))))
 `);
   accountsBefore = /ACCOUNTS (.*)/.exec(out)?.[1] ?? "[]";
+  // Every test below starts from no account, whatever the shop had.
+  runDjangoScript(`
+from store_backend.shop.models import BankAccount
+
+BankAccount.objects.all().delete()
+print("CLEARED")
+`);
 });
 test.afterAll(() => {
   runDjangoScript(`
