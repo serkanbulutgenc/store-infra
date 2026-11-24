@@ -1,0 +1,177 @@
+import { type Browser, expect, type Page, test } from "@playwright/test";
+import { loginState } from "../support/auth";
+import { seedOwner, seedStaff } from "../support/seed";
+import { runDjangoScript } from "../support/stack";
+
+// Store-infra #142: the configurable Ana sayfa (#136). The Owner and Staff get different default
+// Widgets; a person's own layout (off, order, reset) survives a reload; the Owner approves a Staff
+// submission straight from the Approvals Widget and the count drops; Staff never see the
+// Owner-only Widgets (Onay bekleyenler, Onay bekleyen yanıtlar, Satış özeti), not even in the
+// editor's list.
+const run = Date.now().toString(36);
+const banner = { message: `E2E ana sayfa duyurusu ${run}` };
+
+type State = Awaited<ReturnType<typeof loginState>>;
+let staffState: State;
+let ownerState: State;
+
+test.describe.configure({ mode: "serial" });
+
+test.beforeAll(async ({ browser, baseURL }) => {
+  staffState = await loginState(browser, baseURL, seedStaff());
+  ownerState = await loginState(browser, baseURL, seedOwner());
+});
+
+// An announcement left live would show on every Storefront page the other specs open.
+test.afterAll(() => {
+  runDjangoScript(`
+from store_backend.catalog.models import Banner
+
+Banner.objects.filter(message__contains=${JSON.stringify(run)}).delete()
+print("CLEANED")
+`);
+});
+
+async function as(browser: Browser, baseURL: string | undefined, state: State) {
+  const context = await browser.newContext({ baseURL, storageState: state, locale: "tr-TR" });
+  return { context, page: await context.newPage() };
+}
+
+/** A Widget is a labelled section; its title carries the count, e.g. "Yeni siparişler (0)". */
+const widget = (page: Page, title: string) =>
+  page.getByRole("region", { name: new RegExp(`^${title} \\(\\d+\\)$`) });
+
+/** The Widgets on the page, top to bottom, by the id their heading carries. */
+const order = (page: Page) =>
+  page
+    .locator('section[aria-labelledby^="widget-"]')
+    .evaluateAll((els) => els.map((el) => el.getAttribute("aria-labelledby")));
+
+const count = async (page: Page, title: string) => {
+  const text = (await page.getByRole("heading", { name: new RegExp(`^${title} \\(`) }).textContent()) ?? "";
+  return Number(/\((\d+)\)/.exec(text)?.[1]);
+};
+
+const OWNER_ONLY = ["Onay bekleyenler", "Onay bekleyen yanıtlar"];
+const EVERYONE = [
+  "Yeni siparişler",
+  "Süresi dolmak üzere olan havaleler",
+  "Bekleyen iade talepleri",
+  "Azalan stok",
+];
+
+test("the Owner and Staff start with different Widgets", async ({ browser, baseURL }) => {
+  const owner = await as(browser, baseURL, ownerState);
+  await owner.page.goto("/admin");
+  for (const title of [...OWNER_ONLY, ...EVERYONE]) {
+    await expect(widget(owner.page, title), title).toBeVisible();
+  }
+  await expect(owner.page.getByRole("region", { name: "Satış özeti" })).toBeVisible();
+  await owner.context.close();
+
+  const staff = await as(browser, baseURL, staffState);
+  await staff.page.goto("/admin");
+  for (const title of EVERYONE) await expect(widget(staff.page, title), title).toBeVisible();
+  for (const title of OWNER_ONLY) await expect(widget(staff.page, title), title).toHaveCount(0);
+  await expect(staff.page.getByRole("region", { name: "Satış özeti" })).toHaveCount(0);
+
+  // The editor does not offer them either.
+  await staff.page.getByRole("button", { name: "Düzenle" }).click();
+  const editor = staff.page.getByRole("region", { name: "Ana sayfayı düzenle" });
+  await expect(editor.getByLabel("Yeni siparişler", { exact: true })).toBeChecked();
+  for (const title of [...OWNER_ONLY, "Satış özeti"]) {
+    await expect(editor.getByText(title, { exact: true })).toHaveCount(0);
+  }
+  await staff.context.close();
+});
+
+test("a person's own layout survives a reload and can be reset", async ({ browser, baseURL }) => {
+  const staff = await as(browser, baseURL, staffState);
+  const p = staff.page;
+  await p.goto("/admin");
+  await expect.poll(() => order(p)).toEqual([
+    "widget-new-orders",
+    "widget-unpaid-transfers",
+    "widget-open-returns",
+    "widget-low-stock",
+  ]);
+
+  await p.getByRole("button", { name: "Düzenle" }).click();
+  const editor = p.getByRole("region", { name: "Ana sayfayı düzenle" });
+  await editor.getByLabel("Azalan stok", { exact: true }).uncheck();
+  await expect(widget(p, "Azalan stok")).toHaveCount(0);
+  await editor.getByRole("button", { name: "Yeni siparişler: aşağı taşı" }).click();
+  await expect.poll(() => order(p)).toEqual([
+    "widget-unpaid-transfers",
+    "widget-new-orders",
+    "widget-open-returns",
+  ]);
+
+  // Another tab of the same person reads it from the server, not from this page.
+  await p.reload();
+  await expect.poll(() => order(p)).toEqual([
+    "widget-unpaid-transfers",
+    "widget-new-orders",
+    "widget-open-returns",
+  ]);
+
+  await p.getByRole("button", { name: "Düzenle" }).click();
+  await p.getByRole("button", { name: "Varsayılana dön" }).click();
+  await expect.poll(() => order(p)).toEqual([
+    "widget-new-orders",
+    "widget-unpaid-transfers",
+    "widget-open-returns",
+    "widget-low-stock",
+  ]);
+  await p.reload();
+  await expect(widget(p, "Azalan stok")).toBeVisible();
+  await staff.context.close();
+});
+
+test("the Owner approves a Staff submission from the Approvals Widget", async ({
+  browser,
+  baseURL,
+}) => {
+  const staff = await as(browser, baseURL, staffState);
+  const sp = staff.page;
+  await sp.goto("/admin/banners");
+  await sp.getByRole("button", { name: "Yeni banner" }).click();
+  await sp.getByLabel("Alan", { exact: true }).selectOption({ label: "Duyuru çubuğu" });
+  await sp.getByLabel("Mesaj").fill(banner.message);
+  await sp.getByRole("button", { name: "Oluştur" }).click();
+  await expect(sp.getByRole("heading", { name: banner.message })).toBeVisible();
+  await sp.getByRole("button", { name: "Onaya gönder" }).first().click();
+  await expect(sp.getByText("Banner onaya gönderildi.").first()).toBeVisible();
+  await staff.context.close();
+
+  const visitor = await browser.newContext({ baseURL, locale: "tr-TR" });
+  const vp = await visitor.newPage();
+  await vp.goto("/");
+  await expect(vp.getByText(banner.message)).toHaveCount(0);
+
+  const owner = await as(browser, baseURL, ownerState);
+  const op = owner.page;
+  await op.goto("/admin");
+  const before = await count(op, "Onay bekleyenler");
+  expect(before).toBeGreaterThanOrEqual(1);
+
+  // Approve opens a confirmation that says what will happen; nothing is published yet.
+  await op.getByRole("button", { name: `${banner.message} onayla` }).click();
+  const dialog = op.getByRole("dialog");
+  await expect(dialog).toContainText("Duyuru çubuğu");
+  await expect(dialog).toContainText("mağazada yayınlanır");
+  await dialog.getByRole("button", { name: "Vazgeç" }).click();
+  await vp.reload();
+  await expect(vp.getByText(banner.message)).toHaveCount(0);
+
+  await op.getByRole("button", { name: `${banner.message} onayla` }).click();
+  await op.getByRole("dialog").getByRole("button", { name: "Onayla" }).click();
+  await expect(op.getByText("Onaylandı.").first()).toBeVisible();
+  await expect(op.getByRole("button", { name: `${banner.message} onayla` })).toHaveCount(0);
+  await expect.poll(() => count(op, "Onay bekleyenler")).toBe(before - 1);
+
+  await vp.reload();
+  await expect(vp.getByRole("region", { name: "Duyurular" })).toContainText(banner.message);
+  await visitor.close();
+  await owner.context.close();
+});
