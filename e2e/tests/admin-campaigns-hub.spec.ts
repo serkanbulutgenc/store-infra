@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { useStaffLogin } from "../support/auth";
 
-// Store-infra #134: Campaigns and Campaign pages share one Satış entry, "Kampanyalar", as two tabs;
+// Store-infra #134: Campaigns and Campaign pages share one Satış entry, "Kampanyalar", as tabs (a
+// third, "Sepet kampanyaları", came with store-infra#148 and has its own spec);
 // creating either happens on its own admin page, never in a dialog. Staff, who may edit pages but
 // not Campaigns, see the pages alone.
 test.describe("with both permissions", () => {
   useStaffLogin(["manage_campaigns", "edit_campaign_pages"]);
 
-  test("one sidebar entry, two tabs, and no dialogs", async ({ page }) => {
+  test("one sidebar entry, its tabs, and no dialogs", async ({ page }) => {
     await page.goto("/admin");
     const sidebar = page.getByRole("navigation").filter({ hasText: "Satış" }).first();
     await expect(sidebar.getByRole("link", { name: "Kampanyalar", exact: true })).toHaveCount(1);
@@ -16,10 +17,15 @@ test.describe("with both permissions", () => {
     await page.getByRole("link", { name: "Kampanyalar", exact: true }).first().click();
     await expect(page).toHaveURL(/\/admin\/campaigns(\?|$)/);
     const tabs = page.getByRole("tablist", { name: "Kampanya türleri" });
-    await expect(tabs.getByRole("tab", { name: "Kampanyalar" })).toHaveAttribute(
+    await expect(tabs.getByRole("tab", { name: "Kampanyalar", exact: true })).toHaveAttribute(
       "aria-selected",
       "true",
     );
+    await expect(tabs.getByRole("tab")).toHaveText([
+      "Kampanyalar",
+      "Sepet kampanyaları",
+      "Kampanya sayfaları",
+    ]);
 
     await tabs.getByRole("tab", { name: "Kampanya sayfaları" }).click();
     await expect(page).toHaveURL(/tab=pages/);
@@ -30,7 +36,7 @@ test.describe("with both permissions", () => {
     await page.getByRole("link", { name: "Vazgeç" }).click();
     await expect(page).toHaveURL(/\/admin\/campaigns\?tab=pages/);
 
-    await tabs.getByRole("tab", { name: "Kampanyalar" }).click();
+    await tabs.getByRole("tab", { name: "Kampanyalar", exact: true }).click();
     await page.getByRole("link", { name: "Yeni kampanya", exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/campaigns\/new$/);
     await expect(page.getByRole("dialog")).toHaveCount(0);
