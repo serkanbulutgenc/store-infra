@@ -75,6 +75,8 @@ test("shows the tabs and the legal versions on their own tab", async ({ page }) 
   }
   // The home page banner is managed in Banner'lar, not here.
   await expect(tab(page, "Ana sayfa afişi")).toHaveCount(0);
+  // Free shipping is not a Settings field (it will be a Campaign); only the fallback fee is.
+  await expect(page.getByLabel("Ücretsiz kargo eşiği (₺)")).toHaveCount(0);
   await tab(page, "Yasal metin sürümleri").click();
   await expect(page.getByRole("tabpanel", { name: /Yasal/ })).toBeVisible();
 });
@@ -83,7 +85,7 @@ test("edits in two tabs are saved with a single PATCH", async ({ page }) => {
   const sent = patches(page);
   await openSettings(page);
 
-  await page.getByLabel("Kargo ücreti (₺)").fill("41.50");
+  await page.getByLabel("Yedek kargo ücreti (₺)").fill("41.50");
   await tab(page, "Banka bilgileri").click();
   await addAccount(page, 1, { bank: "E2E Bank", holder: "E2E Hesap", iban: IBAN_1 });
 
