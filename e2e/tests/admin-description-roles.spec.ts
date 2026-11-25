@@ -21,6 +21,8 @@ let owned: DescriptionSeed;
 let limited: DescriptionSeed;
 
 test.beforeAll(async ({ browser, baseURL }) => {
+  // Four Django-shell seeds and three logins: more than the default 30 s on a busy stack.
+  test.setTimeout(120_000);
   owned = seedDescriptionProduct();
   limited = seedDescriptionProduct();
   ownerState = await loginState(browser, baseURL, seedOwner());
@@ -74,7 +76,12 @@ test("an Owner writes a Description with an image and it shows on the Storefront
   const shop = await browser.newContext({ baseURL, locale: "tr-TR" });
   const storefront = await shop.newPage();
   await storefront.goto(`/urun/${owned.slug}`);
-  await storefront.getByRole("tab", { name: "Açıklama" }).click();
+  // A click before the page has hydrated is lost, so click again until the tab is selected.
+  const descriptionTab = storefront.getByRole("tab", { name: "Açıklama" });
+  await expect(async () => {
+    await descriptionTab.click();
+    await expect(descriptionTab).toHaveAttribute("aria-selected", "true", { timeout: 1000 });
+  }).toPass();
   const text = storefront.getByRole("tabpanel", { name: "Açıklama" });
   await expect(text.locator("strong")).toHaveText("yazdı");
   await expect(text.locator('img[src*="/media/description/"]')).toHaveCount(1);

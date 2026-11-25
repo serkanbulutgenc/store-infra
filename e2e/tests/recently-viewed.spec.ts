@@ -34,7 +34,10 @@ test("without history there is no rail, not even in the server's HTML", async ({
   await expect(page.getByRole("heading", { name: "Yeni gelenler" })).toBeVisible();
 
   await expect(rail(page)).toHaveCount(0);
-  expect(await (await page.request.get("/")).text()).not.toContain("Son baktıklarınız");
+  // The page data carries the section's title for the browser to fill in, so look for the rail
+  // itself (a region named by a heading), not for the words.
+  const html = await (await page.request.get("/")).text();
+  expect(html).not.toMatch(/<h2[^>]*>Son baktıklarınız/);
 });
 
 test("three viewed Products show most recent first on the homepage above 'Yeni gelenler'", async ({ page }) => {
