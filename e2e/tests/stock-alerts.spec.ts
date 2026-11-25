@@ -42,7 +42,12 @@ async function asStaff<T>(browser: Browser, baseURL: string | undefined, work: (
 /** The product page with the sold-out Size M picked. */
 async function pickSoldOutSize(page: Page) {
   await page.goto(`/urun/${shop.slug}`);
-  await page.getByRole("button", { name: "M (tükendi)" }).click();
+  // A click before the page has hydrated is lost, so click again until the Size is picked.
+  const size = page.getByRole("button", { name: "M (tükendi)" });
+  await expect(async () => {
+    await size.click();
+    await expect(size).toHaveAttribute("aria-pressed", "true", { timeout: 1000 });
+  }).toPass();
   await expect(page.getByRole("button", { name: "Tükendi", exact: true })).toBeDisabled();
 }
 

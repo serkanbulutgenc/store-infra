@@ -230,7 +230,7 @@ test("a Staff Banner is shown on the Storefront only after approval, and its edi
   await sp.goto("/admin/banners");
   await sp.getByRole("button", { name: "Yeni banner" }).click();
   await sp.getByLabel("Alan", { exact: true }).selectOption({ label: "Duyuru çubuğu" });
-  await sp.getByLabel("Mesaj").fill(banner.message);
+  await sp.getByLabel("Mesaj", { exact: true }).fill(banner.message);
   await sp.getByRole("button", { name: "Oluştur" }).click();
   await expect(sp.getByRole("heading", { name: banner.message })).toBeVisible();
   await sp.getByRole("button", { name: "Onaya gönder" }).first().click();
@@ -256,7 +256,7 @@ test("a Staff Banner is shown on the Storefront only after approval, and its edi
   const sp2 = staff2.page;
   await sp2.goto("/admin/banners");
   await sp2.getByRole("link", { name: banner.message, exact: true }).click();
-  await sp2.getByLabel("Mesaj").fill(banner.edited);
+  await sp2.getByLabel("Mesaj", { exact: true }).fill(banner.edited);
   await sp2.getByRole("button", { name: "Onaya gönder" }).click();
   await expect(sp2.getByText("Değişiklik onaya gönderildi.").first()).toBeVisible();
   await staff2.context.close();
@@ -286,7 +286,7 @@ test("a rejected Banner shows its reason to Staff and never reaches the Storefro
   await sp.goto("/admin/banners");
   await sp.getByRole("button", { name: "Yeni banner" }).click();
   await sp.getByLabel("Alan", { exact: true }).selectOption({ label: "Duyuru çubuğu" });
-  await sp.getByLabel("Mesaj").fill(banner.rejected);
+  await sp.getByLabel("Mesaj", { exact: true }).fill(banner.rejected);
   await sp.getByRole("button", { name: "Oluştur" }).click();
   await expect(sp.getByRole("heading", { name: banner.rejected })).toBeVisible();
   await sp.getByRole("button", { name: "Onaya gönder" }).first().click();
