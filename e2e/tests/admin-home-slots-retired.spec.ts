@@ -41,3 +41,36 @@ test("a Slayt section offers its own images, not Banners", async ({ browser, bas
   ]);
   await context.close();
 });
+
+test("Banner'lar is not in the menu: its two lists are tabs under Vitrin", async ({
+  browser,
+  baseURL,
+}) => {
+  const state = await loginState(browser, baseURL, seedOwner());
+  const context = await browser.newContext({ baseURL, storageState: state, locale: "tr-TR" });
+  const page = await context.newPage();
+  await page.goto("/admin/homepage");
+
+  const menu = page.getByRole("navigation", { name: "Yönetim" });
+  await expect(menu.getByRole("link", { name: "Vitrin" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Banner'lar" })).toHaveCount(0);
+
+  const tabs = page.getByRole("navigation", { name: "Vitrin bölümleri" });
+  await expect(tabs.getByRole("link", { name: "Düzen" })).toHaveAttribute("aria-current", "page");
+  await tabs.getByRole("link", { name: "Duyuru çubuğu" }).click();
+
+  await expect(page).toHaveURL(/\/admin\/banners\?slot=announcement/);
+  await expect(page.getByRole("heading", { name: "Vitrin", exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Vitrin bölümleri" })
+      .getByRole("link", { name: "Duyuru çubuğu" }),
+  ).toHaveAttribute("aria-current", "page");
+  // The menu keeps Vitrin highlighted on the banner pages.
+  await expect(menu.getByRole("link", { name: "Vitrin" })).toHaveAttribute("data-active", "true");
+
+  await page.getByRole("navigation", { name: "Vitrin bölümleri" })
+    .getByRole("link", { name: "Kategori sayfası üstü" }).click();
+  await expect(page).toHaveURL(/slot=category_top/);
+  await context.close();
+});
