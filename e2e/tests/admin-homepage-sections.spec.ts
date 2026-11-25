@@ -187,7 +187,8 @@ test("the Owner restores an earlier version from the history", async ({ browser,
   await page.goto("/admin/homepage");
 
   await expect(page.getByRole("heading", { name: "Geçmiş" })).toBeVisible();
-  await expect(page.getByText(/^· yayında$/)).toBeVisible();
+  // Exactly one version is marked as the live one.
+  await expect(page.getByRole("listitem").filter({ hasText: "· yayında" })).toHaveCount(1);
 
   // The newest version is live; the one before it is the layout where the section was shown.
   page.once("dialog", (dialog) => void dialog.accept());
