@@ -8,7 +8,7 @@ test("storefront home loads through Caddy", async ({ page }) => {
   const response = await page.goto("/");
 
   expect(response?.status()).toBe(200);
-  await expect(page.getByRole("link", { name: "Aura Tekstil" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Auraa Giyim" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Yeni gelenler", level: 2 })).toBeVisible();
   await expect(page.locator('[data-theme="storefront"]')).toBeVisible();
   expect(pageErrors).toEqual([]);
