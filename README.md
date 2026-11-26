@@ -1,6 +1,6 @@
 # store-infra
 
-Compose stack, Caddy config, env templates and runbook for the Aura Tekstil store. The apps live in `store-backend` and `store-frontend`.
+Compose stack, Caddy config, env templates and runbook for the Auraa Giyim store. The apps live in `store-backend` and `store-frontend`.
 
 | Service | Role | Network |
 | --- | --- | --- |
