@@ -81,7 +81,7 @@ Not part of the PRD list above, but each step needs evidence before the release 
 - [ ] Write (#11): as Owner and as Staff, open a Product, write a Description in the Açıklama tab with the toolbar, preview it, upload an image and save. A user without `manage_product_photos` sees no image button.
 - [ ] Storefront (#10): the Description shows in the Açıklama tab. Raw HTML, `javascript:` links, external images and strikethrough do not render. Outside links are nofollow. A wide table scrolls inside its own box on a phone.
 - [ ] Limits (#9, #11): 5001 characters is refused with the message in the editor; a text file renamed to `.png` is refused on upload. Uploaded images carry no location data.
-- [ ] Excerpt (#10): quick view and the product's search-result and share text show plain text, with no `**`, `|` or image syntax.
+- [ ] Excerpt (#10): the product's search-result and share text show plain text, with no `**`, `|` or image syntax.
 - [ ] Import (#9): a `description` column sets the Description; a blank cell leaves an existing one alone; two rows of one Product with different descriptions are a row error. See [stock-load.md](stock-load.md).
 
 **Open items these features add to the PRD list**

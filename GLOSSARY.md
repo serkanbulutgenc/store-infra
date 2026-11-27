@@ -25,11 +25,15 @@ _Avoid_: Beden (in code and docs; it is only the Turkish UI label)
 A Product whose selected Colour has exactly one Variant. The customer has no size to choose, so that Variant is picked automatically. Judged per Colour: a Colour with several Sizes still asks for one.
 _Avoid_: single-size, sizeless
 
+**Single-Variant Product**:
+A Product with exactly one Variant: one Colour with one Size. The customer has nothing to choose, so a listing card adds it to the basket at once. A One-size Product with several Colours is not one.
+_Avoid_: simple product, product without variants
+
 **Photo**:
 A picture of a Product. It belongs to a Colour, or is shared by all Colours.
 
 **Description**:
-The formatted text a Product shows on its detail page, written by Owner or Staff. It can contain headings, lists, links, images and tables. Compact views (quick view, listing cards) show only a plain-text excerpt of it.
+The formatted text a Product shows on its detail page, written by Owner or Staff. It can contain headings, lists, links, images and tables. Where there is only room for a summary (search results, share text), a plain-text excerpt of it is used.
 _Avoid_: Details, body
 
 **Thumbnail**:
