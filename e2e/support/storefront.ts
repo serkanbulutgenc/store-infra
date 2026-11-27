@@ -38,3 +38,11 @@ export async function checkoutAndPlace(page: Page, email?: string): Promise<stri
   await expect(page.getByRole("heading", { name: "Siparişiniz alındı" })).toBeVisible();
   return (await page.getByText(/Sipariş numaranız:/).locator("strong").innerText()).trim();
 }
+
+/**
+ * The listing, once the page has settled: a click on a card's bag button before the page has
+ * hydrated is lost.
+ */
+export async function openListing(page: Page) {
+  await page.goto("/ara", { waitUntil: "networkidle" });
+}

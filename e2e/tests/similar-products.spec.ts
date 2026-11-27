@@ -47,11 +47,10 @@ test("the links are in the server's HTML, so crawlers see them", async ({ page }
   expect(html).not.toContain(`href="/urun/${shop.draft.slug}"`);
 });
 
-test("the quick view of a card shows no Similar products", async ({ page }) => {
-  await page.goto(`/urun/${shop.current.slug}`);
+test("the Variant picker of a card shows no Similar products", async ({ page }) => {
+  await page.goto(`/urun/${shop.current.slug}`, { waitUntil: "networkidle" });
   const card = rail(page).getByRole("listitem").filter({ hasText: shop.sameBrand.title });
-  await card.hover();
-  await card.getByRole("button", { name: "Hızlı bakış" }).click();
+  await card.getByRole("button", { name: `${shop.sameBrand.title} sepete ekle` }).click();
 
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText(shop.sameBrand.title).first()).toBeVisible();

@@ -400,14 +400,15 @@ single = product_classes.create(actor, name=${JSON.stringify(`E2E Tek Ebat ${run
 colour = catalog.create_colour(${JSON.stringify(`${run.slice(-3).toUpperCase()} Bordo ${run}`)}, "#800020")
 category = catalog.create_category("E2E Tablo ${run}")
 
-def publish(title, product_class, size):
+def publish(title, product_class, *sizes):
     product = catalog.create_product(title=title, product_class=product_class, category=category, shelf_price="100.00")
-    catalog.create_variant(product, colour=colour, size=size, stock=10)
+    for size in sizes:
+        catalog.create_variant(product, colour=colour, size=size, stock=10)
     ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
     return {"id": product.id, "slug": product.slug, "title": title}
 
 out = {
-    "plain": publish(${JSON.stringify(titles.plain)}, lettered, "M"),
+    "plain": publish(${JSON.stringify(titles.plain)}, lettered, "M", "L"),
     "overridden": publish(${JSON.stringify(titles.overridden)}, lettered, "M"),
     "oneSize": publish(${JSON.stringify(titles.oneSize)}, single, "Tek Ebat"),
     "classId": lettered.id,
@@ -454,9 +455,10 @@ category = catalog.create_category(${JSON.stringify(`E2E Benzer ${run}`)})
 alone = catalog.create_category(${JSON.stringify(`E2E Yalnız ${run}`)})
 giyim = ProductClass.objects.get(name="Giyim")
 
-def make(title, *, brand=None, stock=10, status=ProductStatus.PUBLISHED, cat=category):
+def make(title, *, brand=None, stock=10, status=ProductStatus.PUBLISHED, cat=category, sizes=("M",)):
     product = catalog.create_product(title=title, product_class=giyim, category=cat, shelf_price="100.00", brand=brand)
-    catalog.create_variant(product, colour=colour, size="M", stock=stock)
+    for size in sizes:
+        catalog.create_variant(product, colour=colour, size=size, stock=stock)
     ProductProfile.objects.filter(product=product).update(status=status)
     return {"slug": product.slug, "title": title}
 
@@ -466,7 +468,7 @@ out = {
         make(${JSON.stringify(title("Başka marka"))}, brand=theirs),
         make(${JSON.stringify(title("Markasız"))}),
     ],
-    "sameBrand": make(${JSON.stringify(title("Aynı marka"))}, brand=ours),
+    "sameBrand": make(${JSON.stringify(title("Aynı marka"))}, brand=ours, sizes=("M", "L")),
     "soldOut": make(${JSON.stringify(title("Tükenmiş"))}, brand=ours, stock=0),
     "draft": make(${JSON.stringify(title("Taslak"))}, brand=ours, status=ProductStatus.DRAFT),
     "lonely": make(${JSON.stringify(title("Yalnız"))}, cat=alone),

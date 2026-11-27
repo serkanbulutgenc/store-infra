@@ -8,6 +8,7 @@ import {
   seedStockAlertShop,
   setStockAlerts,
 } from "../support/seed";
+import { openListing } from "../support/storefront";
 
 // Stock alerts from "Haber ver" to the alert email (GLOSSARY: Stock alert). One sold-out Size, two
 // guests, one Staff user. Staff holds `manage_settings` directly because an Owner needs TOTP.
@@ -102,6 +103,15 @@ test("the Dashboard switch turns Haber ver on", async ({ browser, baseURL, page 
 
   await pickSoldOutSize(page);
   await expect(page.getByRole("button", { name: "Haber ver", exact: true })).toBeVisible();
+});
+
+test("the Variant picker of a card offers Haber ver on a sold-out Size", async ({ page }) => {
+  await openListing(page);
+  await page.getByRole("button", { name: `${shop.title} sepete ekle` }).click();
+  const picker = page.getByRole("dialog", { name: shop.title });
+  await picker.getByRole("button", { name: "M (tükendi)" }).click();
+  await picker.getByRole("button", { name: "Haber ver", exact: true }).click();
+  await expect(picker.getByLabel("E-posta", { exact: true })).toBeVisible();
 });
 
 test("an in-stock Size has no Haber ver", async ({ page }) => {

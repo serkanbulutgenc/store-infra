@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
   type ColourSeed,
   type GallerySeed,
@@ -7,10 +7,12 @@ import {
   seedGalleryProduct,
   seedShop,
 } from "../support/seed";
+import { openListing } from "../support/storefront";
 
 // The product page: a one-size product adds with one click, a multi-size one asks for a size,
 // the thumbnails stand in a column left of the photo, the details sit in tabs, a colour switch
-// follows through to photos, sizes and stock, and the card's bag button adds from the listing.
+// follows through to photos, sizes and stock, and the card's bag button adds from the listing,
+// through the Variant picker when there is something to choose.
 test.describe.configure({ mode: "serial" });
 
 let seed: Seed;
@@ -23,7 +25,7 @@ test.beforeAll(() => {
   colours = seedColourProduct();
 });
 
-async function open(page: import("@playwright/test").Page, title: string) {
+async function open(page: Page, title: string) {
   await page.goto("/ara");
   await page.getByRole("link", { name: new RegExp(title) }).first().click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
@@ -80,20 +82,18 @@ test("on a phone the thumbnails sit in a row under the photo", async ({ page }) 
   expect(list && main && list.y >= main.y + main.height - 1).toBe(true);
 });
 
-test("attributes, reviews and description are tabs", async ({ page }) => {
+test("attributes and description are tabs, with the reviews below them", async ({ page }) => {
   await open(page, gallery.title);
   const tabs = page.getByRole("tablist");
-  await expect(tabs.getByRole("tab")).toHaveText([
-    "Ürün özellikleri",
-    /^Yorumlar( \(\d+\))?$/,
-    "Açıklama",
-  ]);
+  await expect(tabs.getByRole("tab")).toHaveText(["Ürün özellikleri", "Açıklama"]);
   await expect(page.getByRole("tab", { name: "Ürün özellikleri" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  await page.getByRole("tab", { name: /^Yorumlar/ }).click();
-  await expect(page.getByText("Henüz değerlendirme yok.")).toBeVisible();
+  const empty = page.getByText("Henüz değerlendirme yok.");
+  await expect(empty).toBeVisible();
+  const [list, reviews] = await Promise.all([tabs.boundingBox(), empty.boundingBox()]);
+  expect(list && reviews && reviews.y > list.y + list.height).toBe(true);
   await page.getByRole("tab", { name: "Açıklama" }).click();
   await expect(page.getByText("Açıklama yok.")).toBeVisible();
 });
@@ -129,30 +129,86 @@ test("switching colour changes the photos, the sizes and the stock label", async
   await expect(sizes.getByRole("button")).toHaveText(["S", "M"]);
 });
 
-test("the card's bag button adds a one-size product at once", async ({ page }) => {
-  await page.goto("/ara");
-  await page.getByRole("button", { name: `${seed.title} sepete ekle` }).click();
+/** A card's bag button on the listing, and what the basket holds afterwards. */
+const bag = (page: Page, title: string) => page.getByRole("button", { name: `${title} sepete ekle` });
+
+async function quantities(page: Page): Promise<number[]> {
+  const basket = await (await page.request.get("/api/store/basket")).json();
+  return basket.lines.map((line: { quantity: number }) => line.quantity);
+}
+
+test("the card's bag button adds a Single-Variant Product at once", async ({ page }) => {
+  await openListing(page);
+  await expect(page.getByRole("button", { name: "Hızlı bakış" })).toHaveCount(0);
+  await bag(page, seed.title).click();
   await expect(page.getByText("Ürün sepete eklendi.")).toBeVisible();
-  // The strip never opened (no "Kapat"), and the bag is back.
-  await expect(page.getByRole("button", { name: "Kapat" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: `${seed.title} sepete ekle` })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await quantities(page)).toEqual([1]);
 });
 
-test("the card's bag button opens a size strip and a chip adds that size", async ({ page }) => {
-  await page.goto("/ara");
-  const bag = page.getByRole("button", { name: `${gallery.title} sepete ekle` });
-  await bag.click();
-  // The listing has its own "Beden" filter; the strip is the bar around "Kapat".
-  const close = page.getByRole("button", { name: "Kapat" });
-  const strip = close.locator("..");
-  await expect(strip.getByRole("button")).toHaveText(["S", "M", ""]);
-  await expect(page.getByText("Ürün sepete eklendi.")).toHaveCount(0);
-  // Closing puts the bag back without adding anything.
-  await close.click();
-  await expect(close).toHaveCount(0);
-  await expect(page.getByText("Ürün sepete eklendi.")).toHaveCount(0);
-  await bag.click();
-  await close.locator("..").getByRole("button", { name: "M", exact: true }).click();
+test("the picker adds the chosen Size and quantity, and stays open when the add fails", async ({
+  page,
+}) => {
+  await openListing(page);
+  await bag(page, gallery.title).click();
+  const picker = page.getByRole("dialog", { name: gallery.title });
+  await expect(picker.getByRole("button", { name: "Beden seçin" })).toBeDisabled();
+  // Tapping a Size selects it and adds nothing.
+  await picker.getByRole("button", { name: "M", exact: true }).click();
+  await expect(picker.getByRole("button", { name: "M", exact: true })).toHaveAttribute("aria-pressed", "true");
+  expect(await quantities(page)).toEqual([]);
+  await picker.getByRole("button", { name: "Adedi artır" }).click();
+  await picker.getByRole("button", { name: "Sepete ekle", exact: true }).click();
   await expect(page.getByText("Ürün sepete eklendi.")).toBeVisible();
-  await expect(bag).toBeVisible();
+  await expect(picker).toHaveCount(0);
+  await expect(bag(page, gallery.title)).toBeFocused();
+  expect(await quantities(page)).toEqual([2]);
+
+  // M has 10 in stock: 2 in the basket and 10 more is refused.
+  await bag(page, gallery.title).click();
+  await picker.getByRole("button", { name: "M", exact: true }).click();
+  for (let i = 1; i < 10; i++) await picker.getByRole("button", { name: "Adedi artır" }).click();
+  const refused = page.waitForResponse(
+    (r) => r.url().endsWith("/api/store/basket/lines") && r.request().method() === "POST",
+  );
+  await picker.getByRole("button", { name: "Sepete ekle", exact: true }).click();
+  expect((await refused).ok()).toBe(false);
+  await expect(page.locator('[data-sonner-toast][data-type="error"]')).toBeVisible();
+  await expect(picker).toBeVisible();
+  expect(await quantities(page)).toEqual([2]);
+});
+
+test("on a phone the picker is a bottom sheet, with a sold-out Size to select", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await openListing(page);
+  await bag(page, colours.title).click();
+  const picker = page.getByRole("dialog", { name: colours.title });
+  await expect(picker.getByText(`Renk: ${colours.first}`)).toBeVisible();
+  await picker.getByRole("button", { name: colours.second }).click();
+  await expect(picker.getByText(`Renk: ${colours.second}`)).toBeVisible();
+  await picker.getByRole("button", { name: "M (tükendi)" }).click();
+  await expect(picker.getByRole("button", { name: "Tükendi", exact: true })).toBeDisabled();
+  await expect
+    .poll(async () => {
+      const box = await picker.boundingBox();
+      return box && [box.x, box.width, Math.round(box.y + box.height)];
+    })
+    .toEqual([0, 390, 800]);
+  await picker.getByRole("link", { name: "Ürün detayları" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: colours.title })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("when the Product cannot be loaded the bag button says so and can be tried again", async ({
+  page,
+}) => {
+  await openListing(page);
+  const product = /\/api\/store\/products\/[^/?]+$/;
+  await page.route(product, (route) => route.abort());
+  await bag(page, seed.title).click();
+  await expect(page.getByText("Ürün yüklenemedi.")).toBeVisible();
+  expect(await quantities(page)).toEqual([]);
+  await page.unroute(product);
+  await bag(page, seed.title).click();
+  await expect(page.getByText("Ürün sepete eklendi.")).toBeVisible();
 });

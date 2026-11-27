@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { tab, useStaffLogin } from "../support/auth";
 import { type SizeGuideSeed, seedSizeGuideShop } from "../support/seed";
+import { openListing } from "../support/storefront";
 
 // The Size guide ("Beden tablosu") and the Fit note ("Kalıp notu") from the Dashboard to the
 // Storefront, as a Staff user (who may edit both). The tests run in order: each builds on the one
@@ -48,6 +49,17 @@ test("a class guide and a Fit note show on the Storefront: the link and note on 
   const dialog = await openGuide(page);
   await expect(dialog.getByText(classGuide)).toBeVisible();
   await expect(dialog.getByRole("cell", { name: "96" })).toBeVisible();
+
+  // A listing card's Variant picker shows the Fit note and opens the same guide on top of itself.
+  await openListing(page);
+  await page.getByRole("button", { name: `${shop.plain.title} sepete ekle` }).click();
+  const picker = page.getByRole("dialog", { name: shop.plain.title });
+  await expect(picker.getByText(fitNote)).toBeVisible();
+  const guide = await openGuide(page);
+  await expect(guide.getByText(classGuide)).toBeVisible();
+  await guide.getByRole("button", { name: "Kapat" }).click();
+  await expect(guide).toHaveCount(0);
+  await expect(picker).toBeVisible();
 });
 
 test("a Product's own guide replaces the class guide, and removing it brings the class guide back", async ({
