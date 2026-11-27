@@ -59,6 +59,10 @@ _Avoid_: related products
 The list of up to 12 Products a Shopper last opened, kept only in their own browser and cleared on sign-out (label "Son baktıklarınız"). It is never sent to the server as a log.
 _Avoid_: history
 
+**Search suggestion**:
+One entry offered under the search box while a Shopper is still typing, leading straight to the page of a Product, Category, Brand, Collection or Campaign page. It shows a picture (when there is one), a name and its type. A Brand has no page of its own, so it leads to the search results filtered to that Brand. Sold-out Products can be suggested, after the others.
+_Avoid_: autocomplete, completion, search result (that is the results page)
+
 **Report**:
 A read-only, Owner-only summary of orders, returns, Campaigns and Vouchers (label "Raporlar"). It never uses visitor tracking.
 _Avoid_: analytics, statistics
