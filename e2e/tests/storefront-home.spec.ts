@@ -93,7 +93,8 @@ test("a rail can be dragged with the mouse", async ({ page }) => {
   await page.goto("/");
   const latest = rail(page, "Yeni gelenler");
   await latest.scrollIntoViewIfNeeded();
-  const track = latest.locator("ul");
+  // The first list is the track; a card with several Colours has a swatch list of its own.
+  const track = latest.locator("ul").first();
   const viewport = latest.locator("div.overflow-hidden").first();
   const box = await viewport.boundingBox();
   const before = (await track.boundingBox())?.x ?? 0;
