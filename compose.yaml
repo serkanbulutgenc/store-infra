@@ -39,6 +39,7 @@ volumes:
   caddy_config: {}
   postgres_data: {}
   media: {}                 # written by api, served read-only by caddy
+  elasticsearch_data: {}    # derived from Postgres: never backed up, only rebuilt
 
 services:
   caddy:
@@ -119,6 +120,30 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+
+  # Search suggestions only (ADR 0002). Optional and off by default: COMPOSE_PROFILES=search
+  # in .env and ELASTICSEARCH_URL in env/django.env, see docs/runbook.md ("Search suggestions").
+  # Nothing depends on it. No login or TLS: it is only on the internal network, with no port.
+  elasticsearch:
+    profiles: ["search"]
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.5.7
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    mem_limit: 2g
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks: [data]
+    healthcheck:
+      # Fails while the cluster is red (the request times out with a 408).
+      test: ["CMD-SHELL", "curl -fs 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=3s' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
 
   # Self-hosted error tracker, Sentry-compatible, so the apps keep their Sentry SDK and only
   # the DSN changes. Opt in with COMPOSE_PROFILES=errors in .env. No public port: the UI is

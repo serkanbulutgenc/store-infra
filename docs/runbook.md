@@ -4,7 +4,7 @@ Status: deploy and rollback (ticket 33) were exercised on the live home server o
 
 ## Server layout
 
-One VPS (2 vCPU, 4 GB, 40 GB SSD minimum, EU region) running this Compose stack. `caddy` is the only service that publishes ports (80, 443). `postgres` and `redis` are on an internal network with no route to the host or the internet.
+One VPS (2 vCPU, 8 GB recommended minimum, 40 GB SSD, EU region) running this Compose stack. 4 GB is enough only without Search suggestions. `caddy` is the only service that publishes ports (80, 443). `postgres`, `redis` and the optional `elasticsearch` are on an internal network with no route to the host or the internet.
 
 ## Secrets
 
@@ -44,7 +44,7 @@ scripts/deploy.sh v1.4.0              # api and web on the same tag
 scripts/deploy.sh sha-1a2b3c4 v1.3.2  # or on different tags
 ```
 
-It pulls the images, starts Postgres and Redis, runs `manage.py migrate` with the new api image, makes sure the `media` volume is owned by the app user (a root-owned volume makes photo uploads fail with a 500), restarts everything and waits for healthchecks. If the restart is not healthy it starts the previous release again and exits non-zero. Brief downtime during the restart is accepted. The live tags are in `.deploy/current` and `.env`.
+It pulls the images, starts Postgres and Redis, runs `manage.py migrate` with the new api image, makes sure the `media` volume is owned by the app user (a root-owned volume makes photo uploads fail with a 500), restarts everything and waits for healthchecks (the optional Elasticsearch is started afterwards and only warns, see "Search suggestions"). If the restart is not healthy it starts the previous release again and exits non-zero. Brief downtime during the restart is accepted. The live tags are in `.deploy/current` and `.env`.
 
 **Rollback:**
 
@@ -55,7 +55,7 @@ scripts/deploy.sh v1.3.2              # or deploy any earlier tag by name
 
 A rollback restarts the old images and does not run migrations backwards. So every migration must work with the previous release for one deploy: add columns and tables nullable or defaulted before the code uses them, and drop or rename only in a later release once nothing reads them. A release that breaks this rule cannot be rolled back; restore from backup instead.
 
-`scripts/test-deploy.sh` checks the script's flow (deploy, second deploy, rollback, failed start, refused `latest`) against a fake docker and runs inside `scripts/check.sh`.
+`scripts/test-deploy.sh` checks the script's flow (deploy, second deploy, rollback, failed start, refused `latest`, the optional Elasticsearch, an unreadable Compose configuration) against a fake docker and runs inside `scripts/check.sh`.
 
 ## Backups and restore drill
 
@@ -157,7 +157,8 @@ SQL
 sed -i "s|CHANGE-DB-PASSWORD|$BUGSINK_DB_PASSWORD|" env/bugsink.env
 unset BUGSINK_DB_PASSWORD
 
-echo 'COMPOSE_PROFILES=errors' >> .env                # keep the service in every later `up` and deploy
+nano .env                                             # keep the service in every later `up` and deploy: one line,
+                                                      # COMPOSE_PROFILES=errors (errors,search with Search suggestions)
 docker compose up -d
 docker compose logs --tail=30 bugsink                 # migrations ran; confirm phone-home is off
 ```
@@ -175,6 +176,89 @@ Put the `store-api` DSN in `env/django.env` and the `store-web` DSN in `env/web.
 **Alerts.** Bugsink emails about new issues when `EMAIL_HOST` and the other `EMAIL_*` values in `env/bugsink.env` are set (the shop's SMTP relay works). If the server itself is down nothing reports, which is what the external uptime checks are for.
 
 **Upgrades.** Change the image tag in `compose.yaml`, read Bugsink's upgrade notes, then `docker compose up -d bugsink`.
+
+## Search suggestions (Elasticsearch)
+
+Optional service `elasticsearch` (profile `search`, image pinned in `compose.yaml`). It serves only the suggestions under the Storefront search box; `/ara` and everything else work without it (ADR 0002). It needs an api release that includes Search suggestions, and the search box shows them only with a web release that has the panel.
+
+It is on the internal `data` network with no published port, and has **no login and no TLS**: anything on that network can read or change the index. Never publish its port. The index is derived from Postgres, so it is **not backed up**, only rebuilt.
+
+The commands below are for production. If `PROXY_NETWORK` is set, add `-f compose.proxy.yaml` after `-f compose.yaml`.
+
+**Check the server before enabling.** It gets a 1 GB heap and a 2 GB memory limit (about 1.5 GB used with a nearly empty catalogue), and the image takes about 1.5 GB of disk.
+
+```sh
+free -h        # "available" must be at least 2.5 GB
+nproc
+df -h /        # keep the disk well under 85% full, see "Disk" below
+cat /proc/sys/vm/max_map_count
+```
+
+An 8 GB server is the recommended minimum with this service on. Elasticsearch asks for `vm.max_map_count` of at least 1048576 on the host; if it is lower:
+
+```sh
+echo 'vm.max_map_count=1048576' | sudo tee /etc/sysctl.d/99-elasticsearch.conf
+sudo sysctl --system
+```
+
+**Enable.**
+
+1. In `.env`, set `COMPOSE_PROFILES=search`. Keep one such line and list every profile in use: `COMPOSE_PROFILES=errors,search`.
+2. In `env/django.env`, set `ELASTICSEARCH_URL=http://elasticsearch:9200`.
+3. Apply, then fill the index without waiting for the minute job:
+
+```sh
+docker compose -f compose.yaml up -d --wait          # also recreates api, worker and beat with the new setting
+docker compose -f compose.yaml exec api python manage.py rebuild_suggestions
+```
+
+Check it: request `https://<domain>/api/store/suggestions?q=<start of a Category name>`. 200 means it works; 503 means off, unreachable or not indexed yet. With a web release that has the panel, typing in the search box shows them too.
+
+**Day to day.** `beat` refreshes the index every minute, so a change shows up in about a minute. To build it afresh (the old one answers until the new one is complete):
+
+```sh
+docker compose -f compose.yaml exec api python manage.py rebuild_suggestions
+```
+
+If it says a refresh or rebuild is already running, try again in a minute. A release that changes the index format needs no manual step: suggestions answer 503 until the first refresh has built the new index. `api`, `worker` and `beat` must always run the same release, which `scripts/deploy.sh` does.
+
+**Deploys.** `scripts/deploy.sh` waits for the shop first and starts Elasticsearch afterwards. An unhealthy Elasticsearch prints a warning and does not fail or roll back the release. `scripts/alerts-check.sh` does not watch it either, so check it after a deploy or a reboot.
+
+**Check health.**
+
+```sh
+docker compose -f compose.yaml ps elasticsearch
+docker compose -f compose.yaml logs --tail=50 elasticsearch worker
+docker compose -f compose.yaml exec elasticsearch curl -s 'localhost:9200/_cluster/health?pretty'
+```
+
+`yellow` is normal on a single node (the replica copies have nowhere to go); `red` is not.
+
+**Disk.** Elasticsearch's default limits are on: from 90% full it tries to move data away, and at 95% it makes the index read-only. The suggestions then go stale and the `worker` log says "Search suggestions were not refreshed". Free disk space; the block lifts by itself.
+
+**Queries are not logged.** Neither Caddy nor gunicorn writes access logs. Keep it so: an access log would record what Shoppers type.
+
+**Disable.**
+
+1. In `env/django.env`, empty `ELASTICSEARCH_URL`.
+2. Remove the container while the profile is still known (removing the profile alone leaves it running):
+
+```sh
+docker compose -f compose.yaml --profile search rm -sf elasticsearch
+```
+
+3. Take `search` out of `COMPOSE_PROFILES` in `.env`, then `docker compose -f compose.yaml up -d --wait`.
+4. Optional, to free the disk: `docker volume rm store_elasticsearch_data`.
+
+**Rolling back to a release without Search suggestions.** The refresh schedule is stored in the database, so the old `beat` keeps sending a task the old `worker` does not know, and logs an error every minute. After the rollback, remove it:
+
+```sh
+docker compose -f compose.yaml exec api python manage.py shell -c 'from django_celery_beat.models import PeriodicTask; PeriodicTask.objects.filter(name="refresh-search-suggestions").delete()'
+```
+
+A later release with suggestions creates it again.
+
+**Upgrading.** Change the image tag in `compose.yaml` and in `scripts/check_search.py`, together with the versions `store-backend` tests against, and read Elasticsearch's upgrade notes. After a major upgrade, if it does not start on the old data, remove the volume and rebuild.
 
 ## Home server (non-root user, OpenMediaVault)
 
@@ -239,7 +323,7 @@ The store's Caddy is reachable on that network as `store-caddy` (an alias, becau
 
 ## Server baseline
 
-Provision a VPS (2 vCPU, 4 GB, 40 GB SSD, EU region) with Debian 12/13 or Ubuntu 24.04 and add your SSH public key at creation. Then:
+Provision a VPS (2 vCPU, 8 GB, 40 GB SSD, EU region; see "Server layout") with Debian 12/13 or Ubuntu 24.04 and add your SSH public key at creation. Then:
 
 1. As root: `git clone` this repo, then `DEPLOY_USER=deploy scripts/server-baseline.sh`. Keep the root session open.
 2. In a new terminal, confirm `ssh deploy@<server>` works. Only then close the root session.

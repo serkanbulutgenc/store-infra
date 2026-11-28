@@ -61,7 +61,7 @@ jobs:
 
       - name: Assert every service is up
         working-directory: store-infra
-        run: scripts/assert-stack-up.sh
+        run: scripts/assert-stack-up.sh elasticsearch
 
       - uses: pnpm/action-setup@v4
         with:
@@ -86,7 +86,7 @@ jobs:
 
       - name: Assert every service is still up
         working-directory: store-infra
-        run: scripts/assert-stack-up.sh
+        run: scripts/assert-stack-up.sh elasticsearch
 
       - name: Dump service logs
         if: failure()

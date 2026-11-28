@@ -11,6 +11,7 @@ cat > .env <<ENV
 BACKEND_DIR=${BACKEND_DIR:-../store-backend}
 FRONTEND_DIR=${FRONTEND_DIR:-../store-frontend}
 HTTP_PORT=8080
+COMPOSE_PROFILES=search
 ENV
 
 cat > env/postgres.env <<ENV
@@ -29,6 +30,7 @@ DJANGO_FRONTEND_ORIGIN=http://localhost:8080
 DJANGO_SECURE_SSL_REDIRECT=False
 WEB_CONCURRENCY=2
 REDIS_URL=redis://redis:6379/0
+ELASTICSEARCH_URL=http://elasticsearch:9200
 ENV
 
 cat > env/web.env <<ENV

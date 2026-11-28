@@ -9,6 +9,7 @@ Compose stack, Caddy config, env templates and runbook for the Auraa Giyim store
 | `api` | Django + gunicorn on :5000 | app, data |
 | `worker`, `beat` | Celery, same image as `api` | app, data |
 | `postgres`, `redis` | data stores, not reachable from the host | data (internal) |
+| `elasticsearch` | optional (profile `search`): Search suggestions only | data (internal) |
 
 ## Local
 
@@ -30,6 +31,8 @@ docker compose -f compose.yaml -f compose.dev.yaml exec api python manage.py mig
 ```
 
 The api's `/start` does not migrate (only `scripts/deploy.sh` does), so a fresh database stays empty until you run `migrate`; until then `beat` crash-loops and the API returns 500s. Postgres only reads `POSTGRES_PASSWORD` when it first creates the volume: if you regenerate `env/postgres.env` afterwards, the services fail with "password authentication failed", so reset the dev database with `docker compose -f compose.yaml -f compose.dev.yaml down -v` (this deletes its data).
+
+Search suggestions are off by default. To try them, add `COMPOSE_PROFILES=search` to `.env`, set `ELASTICSEARCH_URL=http://elasticsearch:9200` in `env/django.env` and run `up` again (see the runbook, "Search suggestions").
 
 Emails go to Mailpit at http://localhost:8025. The dev overlay sets `DJANGO_DEV_STACK=True`, `OWNER_MFA_REQUIRED=False` and `EMAIL_USE_TLS=False`; production refuses to start with either of the last two unless `DJANGO_DEV_STACK=True` is set, so never copy them into a server's `env/django.env`. `assign_owner` makes your account an Owner (`docker compose ... exec api python manage.py assign_owner you@example.com`).
 
@@ -55,11 +58,11 @@ Backend errors go to Sentry (scrubbed), logs are JSON with rotation, `scripts/al
 
 ## Checks
 
-`scripts/check.sh` runs the deploy-script and backup/restore tests (fake docker), validates both Compose configurations, asserts only `caddy` publishes ports, and validates the Caddyfile (the last step needs a Docker daemon).
+`scripts/check.sh` runs the deploy-script, backup/restore and stack-status tests (no running stack), validates both Compose configurations, asserts only `caddy` publishes ports, checks that `elasticsearch` is optional, internal and nothing depends on it, and validates the Caddyfile (the last step needs a Docker daemon).
 
 ## End-to-end smoke tests
 
-Playwright tests in `e2e/` run against the real stack (both app images built from the sibling checkouts). The CI job `.github/workflows/e2e.yml` runs on pull requests: it builds the images, runs `up --wait`, asserts every service is up, runs the tests, asserts again, and dumps logs plus the Playwright report on failure.
+Playwright tests in `e2e/` run against the real stack (both app images built from the sibling checkouts). The CI job `.github/workflows/e2e.yml` runs on pull requests: it builds the images, runs `up --wait`, asserts every service is up (with the `search` profile on, so `elasticsearch` must be healthy), runs the tests, asserts again, and dumps logs plus the Playwright report on failure.
 
 Locally, with the dev stack already up (`docker compose -f compose.yaml -f compose.dev.yaml up -d --wait`):
 
@@ -113,4 +116,4 @@ The Voucher specs (`e2e/tests/vouchers-*.spec.ts`) cover the whole feature again
 
 To reuse the harness for a new test, add a spec under `e2e/tests/`. `e2e/support/stack.ts` has helpers for running commands in service containers (`execInService`) and for reading endpoints Caddy does not publish (`getFromApiContainer`).
 
-CI notes: `scripts/ci-env.sh` writes throwaway env files with random secrets. The workflow checks out `store-backend` and `store-frontend` from the same owner; for private repos add a `CHECKOUT_TOKEN` secret with read access.
+CI notes: `scripts/ci-env.sh` writes throwaway env files with random secrets and switches Search suggestions on. The workflow checks out `store-backend` and `store-frontend` from the same owner; for private repos add a `CHECKOUT_TOKEN` secret with read access.
