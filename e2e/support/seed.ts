@@ -855,3 +855,154 @@ print("SEEDED")
   if (!out.includes("SEEDED")) throw new Error(`seeding failed (see api container logs):\n${out}`);
   return { email, password };
 }
+
+export interface SearchSeed {
+  /** In every name, so this query matches these five items and no other spec's. */
+  token: string;
+  category: { name: string; path: string };
+  brand: { name: string; path: string };
+  collection: { name: string; path: string };
+  campaignPage: { name: string; path: string };
+  product: { name: string; path: string };
+}
+
+/**
+ * One public item of each type a Search suggestion can lead to, each with a picture, processed
+ * in the script itself (no worker round trip). The Product is in the Category, the Brand and the
+ * Collection. Leaves shop settings alone.
+ */
+export function seedSearchShop(): SearchSeed {
+  // The digit switches off typo tolerance for this word, so earlier runs never match.
+  const token = `${Date.now().toString(36)}1`;
+  const script = `
+import io, json
+from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
+from oscar.apps.catalogue.models import ProductClass
+from PIL import Image
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import (
+    approval, brand_logo, browse, campaign_pages, catalog, categories, collection_admin, collections, media,
+)
+from store_backend.users.models import User
+
+owner = User(email="e2e-search-${token}@example.com", is_staff=True)
+owner.set_unusable_password()  # only the actor for publishing; never logs in
+owner.save()
+owner.groups.add(Group.objects.get(name="Owner"))
+
+def picture():
+    buf = io.BytesIO()
+    Image.new("RGB", (900, 1200), (30, 120, 200)).save(buf, "PNG")
+    return SimpleUploadedFile("p.png", buf.getvalue(), "image/png")
+
+category = catalog.create_category("E2E Kategori ${token}")
+categories.upload_image(category, picture())
+categories.process_image(category.pk)
+
+brand = catalog.create_brand("E2E Marka ${token}")
+brand_logo.upload(brand, picture())
+brand_logo.process(brand.pk)
+
+colour = catalog.create_colour(${JSON.stringify(`${token.slice(-4, -1).toUpperCase()} Mor ${token}`)}, "#800080")
+product = catalog.create_product(
+    title="E2E Ürün ${token}",
+    product_class=ProductClass.objects.get(name="Giyim"),
+    category=category,
+    shelf_price="100.00",
+    brand=brand,
+)
+catalog.create_variant(product, colour=colour, size="M", stock=5)
+photo = media.upload(owner, product, picture())
+media.process(photo.pk)
+ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+
+collection = collection_admin.create(owner, name="E2E Koleksiyon ${token}", product_ids=[product.pk])
+collection_admin.upload_image(owner, collection.pk, picture())
+collection_admin.process_image(collection.pk)
+collection_admin.publish(owner, collection.pk)
+collection.refresh_from_db()
+
+page = campaign_pages.create(owner, title="E2E Kampanya ${token}")
+campaign_pages.upload_image(owner, page.pk, picture())
+campaign_pages.process_image(page.pk)
+approval.publish(owner, campaign_pages.KIND, page.pk)
+page.refresh_from_db()
+
+def item(name, path):
+    return {"name": name, "path": path}
+
+print("SEEDED " + json.dumps({
+    "category": item(category.name, categories.path(category)),
+    "brand": item(brand.name, browse.brand_path(brand.pk)),
+    "collection": item(collection.name, collections.path(collection)),
+    "campaignPage": item(page.title, campaign_pages.path(page)),
+    "product": item(product.title, catalog.product_path(product.profile.slug)),
+}))
+`;
+  const out = runDjangoScript(script);
+  const match = out.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
+  return { token, ...(JSON.parse(match[1]) as Omit<SearchSeed, "token">) };
+}
+
+export interface SearchExtrasSeed {
+  /** A Category whose name is full of Turkish letters, and those words typed without them. */
+  turkish: { name: string; query: string };
+  /** Two published Products found by `query`; the spec archives `archived`. */
+  pair: { query: string; kept: string; archived: { slug: string; title: string } };
+}
+
+/** What the Turkish letters and archiving specs search for. Leaves shop settings alone. */
+export function seedSearchExtras(): SearchExtrasSeed {
+  const token = `${Date.now().toString(36)}2`;
+  const pairToken = `${Date.now().toString(36)}3`;
+  // Far more letters differ than typo tolerance allows, so only folding can match them.
+  const turkish = {
+    name: `E2E Gümüşçülük Işıltısı ${token}`,
+    query: `gumusculuk isiltisi ${token}`,
+  };
+  const script = `
+import json
+from oscar.apps.catalogue.models import ProductClass
+from store_backend.catalog.models import ProductProfile, ProductStatus
+from store_backend.services import catalog
+
+catalog.create_category(${JSON.stringify(turkish.name)})
+colour = catalog.create_colour(${JSON.stringify(`${pairToken.slice(-4, -1).toUpperCase()} Pembe ${pairToken}`)}, "#ffc0cb")
+category = catalog.create_category("E2E Arşiv ${pairToken}")
+
+def publish(title):
+    product = catalog.create_product(
+        title=title,
+        product_class=ProductClass.objects.get(name="Giyim"),
+        category=category,
+        shelf_price="100.00",
+    )
+    catalog.create_variant(product, colour=colour, size="M", stock=5)
+    ProductProfile.objects.filter(product=product).update(status=ProductStatus.PUBLISHED)
+    return {"slug": product.slug, "title": title}
+
+# The Category's name has the token too, but another word, so the query below leaves it out.
+kept = publish("E2E Kalan ürün ${pairToken}")
+archived = publish("E2E Kalkan ürün ${pairToken}")
+print("SEEDED " + json.dumps({"kept": kept["title"], "archived": archived}))
+`;
+  const out = runDjangoScript(script);
+  const match = out.match(/SEEDED (\{.*\})/);
+  if (!match?.[1]) throw new Error(`seeding failed (see api container logs for the traceback):\n${out}`);
+  const pair = JSON.parse(match[1]) as Omit<SearchExtrasSeed["pair"], "query">;
+  return { turkish, pair: { query: `ürün ${pairToken}`, ...pair } };
+}
+
+/** Archive a Product as the Dashboard does. */
+export function archiveProduct(slug: string): void {
+  const out = runDjangoScript(`
+from store_backend.catalog.models import ProductProfile
+from store_backend.services import catalog
+
+catalog.archive_product(ProductProfile.objects.get(slug=${JSON.stringify(slug)}).product)
+print("ARCHIVED")
+`);
+  if (!out.includes("ARCHIVED")) throw new Error(`could not archive ${slug}:\n${out}`);
+}

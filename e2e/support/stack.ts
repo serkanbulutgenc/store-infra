@@ -7,12 +7,14 @@ export const STACK_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url
 
 const COMPOSE_FILES = (process.env.E2E_COMPOSE_FILES ?? "compose.yaml,compose.dev.yaml").split(",");
 
-function compose(args: string[]): string {
+/** `docker compose` on the stack. A failure throws with the command's stderr on `stderr`. */
+export function compose(args: string[], timeout = 30_000): string {
   const files = COMPOSE_FILES.flatMap((f) => ["-f", f]);
   return execFileSync("docker", ["compose", ...files, ...args], {
     cwd: STACK_DIR,
     encoding: "utf8",
-    timeout: 30_000,
+    stdio: "pipe",
+    timeout,
   });
 }
 
