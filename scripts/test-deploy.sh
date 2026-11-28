@@ -12,6 +12,16 @@ touch "$work/compose.yaml"
 cat >"$work/fake-docker" <<'FAKE'
 #!/usr/bin/env bash
 echo "$* | API_IMAGE=${API_IMAGE:-} WEB_IMAGE=${WEB_IMAGE:-}" >>"$FAKE_LOG"
+if [[ "$*" == *"config --services"* ]]; then
+  [ -z "${FAIL_CONFIG:-}" ] || exit 1
+  printf '%s\n' caddy web api worker beat postgres redis ${SEARCH:+elasticsearch}
+  exit 0
+fi
+# A broken Elasticsearch fails every `up` that includes it: by name, or by naming nothing.
+if [[ -n "${SEARCH_BROKEN:-}" && "$*" == *" up -d "* ]]; then
+  named=${*##*--wait-timeout }
+  if [[ "$named" != *" "* || "$named" == *elasticsearch* ]]; then exit 1; fi
+fi
 if [[ "$*" == *"up -d --remove-orphans"* && -n "${FAIL_ON:-}" && "${API_IMAGE:-}" == *"$FAIL_ON" ]]; then exit 1; fi
 FAKE
 chmod +x "$work/fake-docker"
@@ -50,6 +60,39 @@ if FAIL_ON=:v3 scripts/deploy.sh v3 >/dev/null 2>&1; then fail "a failed start m
 expect_live ghcr.io/OWNER/store-backend:v2
 [ "$(cat .deploy/current)" = "v2 v2" ] || fail "state must not advance on failure"
 tail -n1 log | grep -q "API_IMAGE=ghcr.io/OWNER/store-backend:v2" || fail "previous release not restarted"
+
+# Search suggestions are optional: Elasticsearch starts after the shop and never decides
+# whether a release is healthy.
+shop="up -d --remove-orphans --wait --wait-timeout 180 caddy web api worker beat postgres redis |"
+search="up -d --wait --wait-timeout 180 elasticsearch |"
+
+: >log
+scripts/deploy.sh v4 >/dev/null
+grep -qF "$shop" log || fail "every service must be named when the profile is off"
+if grep -q "up -d.*elasticsearch" log; then fail "profile off: Elasticsearch must not be started"; fi
+
+: >log
+SEARCH=1 scripts/deploy.sh v5 >/dev/null 2>err || fail "deploy with search"
+grep -qF "$shop" log || fail "the shop must be waited for without Elasticsearch"
+shop_line=$(grep -nF "$shop" log | head -1 | cut -d: -f1)
+search_line=$(grep -nF "$search" log | head -1 | cut -d: -f1)
+[ -n "$search_line" ] && [ "$shop_line" -lt "$search_line" ] || fail "Elasticsearch must start after the shop"
+if grep -qi "warning" err; then fail "a healthy Elasticsearch must not warn"; fi
+
+: >log
+SEARCH=1 SEARCH_BROKEN=1 scripts/deploy.sh v6 >/dev/null 2>err || fail "a broken Elasticsearch must not fail a deploy"
+expect_live ghcr.io/OWNER/store-backend:v6
+[ "$(cat .deploy/current)" = "v6 v6" ] || fail "state must advance despite a broken Elasticsearch"
+grep -qi "warning.*Elasticsearch" err || fail "a broken Elasticsearch must be reported"
+
+SEARCH=1 SEARCH_BROKEN=1 scripts/deploy.sh --rollback >/dev/null 2>err || fail "a broken Elasticsearch must not fail a rollback"
+expect_live ghcr.io/OWNER/store-backend:v5
+grep -qi "warning.*Elasticsearch" err || fail "rollback must report a broken Elasticsearch"
+
+: >log
+if FAIL_CONFIG=1 scripts/deploy.sh v7 >/dev/null 2>&1; then fail "an unreadable Compose configuration must fail the deploy"; fi
+expect_live ghcr.io/OWNER/store-backend:v5
+if grep -q "remove-orphans" log; then fail "nothing must be restarted without the service list"; fi
 
 if scripts/deploy.sh latest >/dev/null 2>&1; then fail "latest must be refused"; fi
 if scripts/deploy.sh >/dev/null 2>&1; then fail "a tag is required"; fi

@@ -8,7 +8,8 @@
 # Steps: pull the images, start Postgres and Redis, run migrations with the NEW api
 # image, make sure the media volume belongs to the app user, restart everything on the
 # new tags and wait for healthchecks. If the restart does not come up healthy the
-# previous tags are started again.
+# previous tags are started again. Elasticsearch (profile `search`) is optional: it is
+# started afterwards and only warns when unhealthy.
 #
 # Migrations must stay backwards compatible with the previous release for one deploy
 # (add before you use, drop only in a later release), because a rollback restarts the
@@ -53,9 +54,22 @@ set_env() { # set_env KEY VALUE, rewriting .env in place (mode kept)
   fi
 }
 
-start() { # start API_TAG WEB_TAG: bring the whole stack up on these tags
+# Elasticsearch is optional: started after the shop, never a reason to fail or roll back.
+SEARCH_SERVICE=elasticsearch
+
+start() { # start API_TAG WEB_TAG: bring the shop up on these tags
+  local services
+  services=$(compose config --services) || return 1
+  # shellcheck disable=SC2046  # one argument per service name
   API_IMAGE="$API_REPO:$1" WEB_IMAGE="$WEB_REPO:$2" \
-    compose up -d --remove-orphans --wait --wait-timeout "$WAIT_TIMEOUT"
+    compose up -d --remove-orphans --wait --wait-timeout "$WAIT_TIMEOUT" \
+    $(grep -vx "$SEARCH_SERVICE" <<<"$services")
+}
+
+start_search() { # with the `search` profile on, bring Elasticsearch up too
+  compose config --services | grep -x "$SEARCH_SERVICE" >/dev/null || return 0
+  compose up -d --wait --wait-timeout "$WAIT_TIMEOUT" "$SEARCH_SERVICE" ||
+    echo "deploy: warning: Elasticsearch is not healthy; the shop is up without Search suggestions (see the runbook)" >&2
 }
 
 record() { # record API_TAG WEB_TAG: make these the live tags
@@ -81,6 +95,7 @@ if [ "${1:-}" = "--rollback" ]; then
   mv "$STATE/swap" "$STATE/previous"
   set_env API_IMAGE "$API_REPO:$api_tag"
   set_env WEB_IMAGE "$WEB_REPO:$web_tag"
+  start_search
   echo "== rolled back"
   exit 0
 fi
@@ -114,4 +129,5 @@ if ! start "$api_tag" "$web_tag"; then
 fi
 
 record "$api_tag" "$web_tag"
+start_search
 echo "== deployed api=$api_tag web=$web_tag"
