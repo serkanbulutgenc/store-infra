@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { loginState } from "../support/auth";
+import { dragListening } from "../support/drag";
 import { seedStaff } from "../support/seed";
 import { runDjangoScript } from "../support/stack";
 
@@ -108,12 +109,13 @@ test("a Product can be moved from the keyboard too", async ({ page }) => {
   await page.goto(`/admin/collections/${ordered.id}`);
   await expect.poll(() => order(page)).toEqual([title.c, title.a, title.b]);
 
-  // Each key waits for the drag's own announcement: a key sent before the drag has started or
-  // before the previous step has moved the item is lost, or lands twice.
+  // Each step waits for the drag's own announcement, and the first arrow also for the drag to
+  // be listening: a key sent too early is lost.
   const live = page.getByRole("status").filter({ hasText: title.b });
   await handle(page, title.b).focus();
   await page.keyboard.press("Space");
   await expect(live).toContainText("3. sıraya taşınacak");
+  await dragListening(page);
   await page.keyboard.press("ArrowUp");
   await expect(live).toContainText("2. sıraya taşınacak");
   await page.keyboard.press("Space");

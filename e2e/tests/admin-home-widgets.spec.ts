@@ -1,5 +1,6 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 import { loginState } from "../support/auth";
+import { dragListening } from "../support/drag";
 import { seedOwner, seedStaff } from "../support/seed";
 import { runDjangoScript } from "../support/stack";
 
@@ -316,11 +317,12 @@ test("a card can be moved from the keyboard too", async ({ browser, baseURL }) =
   const p = staff.page;
   await resetLayout(p);
   await p.getByRole("button", { name: "Süresi dolmak üzere olan havaleler: sürükle" }).focus();
-  // Each key waits for the drag's own announcement: a key sent before the drag has started or
-  // moved is lost.
+  // Each step waits for the drag's own announcement, and the first arrow also for the drag to
+  // be listening: a key sent too early is lost.
   const status = p.getByRole("status").filter({ hasText: "Süresi dolmak üzere olan havaleler" });
   await p.keyboard.press("Space");
   await expect(status).toContainText("2. sıraya taşınacak");
+  await dragListening(p);
   await p.keyboard.press("ArrowLeft");
   await expect(status).toContainText("1. sıraya taşınacak");
   await p.keyboard.press("Space");
